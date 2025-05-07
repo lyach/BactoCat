@@ -1,0 +1,19 @@
+Model Name,Organism,Genome ID,Taxonomy ID
+e_coli_core,Escherichia coli str. K-12 substr. MG1655,NC_000913.3,511145
+iAB_RBC_283,Homo sapiens,GCF_000001405.33,9606
+iAF692,Methanosarcina barkeri str. Fusaro,CP000099.1,269797
+iCHOv1,Cricetulus griseus,NC_007936.1,10029
+iEK1008,Mycobacterium tuberculosis H37Rv,NC_000962.3,83332
+iIT341,Helicobacter pylori 26695,NC_000915.1,85962
+iJB785,Synechococcus elongatus PCC 7942,NC_007604.1,1140
+iJN1463,Pseudomonas putida KT2440,NC_002947.4,160488
+iJN678,Synechocystis sp. PCC 6803,BA000022.2,1148
+iJN746,Pseudomonas putida KT2440,NC_002947.3,160488
+iLJ478,Thermotoga maritima MSB8,NC_000853.1,243274
+iMM1415,Mus musculus,GCF_000001635.24,10090
+iPC815,Yersinia pestis CO92,NC_003143.1,214092
+iSF_1195,Shigella flexneri 2a str. 301,AE005674.2,198214
+iSynCJ816,Synechocystis sp. PCC 6803,NC_000911.1,1148
+iYL1228,Klebsiella pneumoniae subsp. pneumoniae MGH 78578,CP000647.1,272620
+iYO844,Bacillus subtilis subsp. subtilis str. 168,AL009126.3,224308
+STM_v1_0,Salmonella enterica subsp. enterica serovar Typhimurium str. LT2,AE006468.1,99287
