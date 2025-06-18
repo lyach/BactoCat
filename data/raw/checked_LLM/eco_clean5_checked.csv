@@ -1,0 +1,17 @@
+ecomics_rxn_id,ecomics_rxn,bigg_id,gem_rxn_match,dice_score,gem_rxn_id,to check,ecomics_rxn_type,to_check
+R0112,Cit <=> ICit (exch),na,cit_e <=> cit_p,0.5,CITtex,,citrate ↔ isocitrate exchange,True
+R0018,CIT -> ICT,na,cit_e <=> cit_p,0.5,CITtex,,aconitase (citrate → isocitrate),True
+R0101,Ac -> Ac.Ext,na,ac_e <=> ac_p,0.5,ACtex,,acetate export (transport),True
+R0082,Thr + NAD -> Gly + AcCoA + NADH,na,coa_c + nad_c + pyr_c --> accoa_c + co2_c + nadh_c,0.545,PDH,,threonine dehydrogenase (thr → gly + AcCoA),True
+R0114,SucCoA + ADP + Pi <=> Suc + ATP (exch),na,atp_c + coa_c + succ_c <=> adp_c + pi_c + succoa_c,0.545,SUCOAS,,succinyl‑CoA synthetase,True
+R0077,Asp + NH3 + 2 ATP -> Asn + 2 ADP + 2 Pi,na,atp_c + h2o_c --> adp_c + h_c + pi_c,0.545,ATPM,,asparagine synthetase (Asp → Asn),True
+R0073,Glu + ATP + NH3 -> Gln + ADP + Pi,na,atp_c + h2o_c --> adp_c + h_c + pi_c,0.545,ATPM,,glutamine synthetase,True
+R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD,na,atp_c + fadh2_c + 2.0 fe2_c + h2o_c + sufbcd_c + 2.0 sufsesh_c --> adp_c + fad_c + 7.0 h_c + pi_c + sufbcd_2fe2s_c + 2.0 sufse_c,0.556,S2FE2SS,,oxidative phosphorylation (FADH2),True
+R0065,S7P <=> R5P + E-C2 (net),na,r5p_c + xu5p__D_c <=> g3p_c + s7p_c,0.571,TKT1,,transketolase (TKT1),True
+R0025,MAL -> PYR + CO2,ME1;ME2,h_c + oaa_c --> co2_c + pyr_c,0.571,OAADC,,malic enzyme (malate → pyruvate),True
+R0110,S7P <=> R5P + E-C2 (exch),na,r5p_c + xu5p__D_c <=> g3p_c + s7p_c,0.571,TKT1,,transketolase exchange,True
+R0009,PYR -> AcCoA + CO2,PDHm,h_c + oaa_c --> co2_c + pyr_c,0.571,OAADC,,pyruvate dehydrogenase (PDH),True
+R0113,ICit + NADP <=> AKG + CO2 + NADPH (exch),na,icit_c + nadp_c <=> akg_c + co2_c + nadph_c,0.6,ICDHyr,,isocitrate dehydrogenase (IDH),True
+R0059,Exch. (F16P <=> DHAP + G3P),na,fdp_c <=> dhap_c + g3p_c,0.667,FBA,,"fructose‑1,6‑bisP aldolase (FBA)",True
+R0028,6-PG -> G3P + PYR,na,2ddg6p_c --> g3p_c + pyr_c,0.667,EDA,,KDPG aldolase (EDA),True
+R0070,OAC + ATP -> PEP + CO2 + ADP,na,atp_c + oaa_c --> adp_c + co2_c + pep_c,0.8,PPCK,,PEP carboxykinase (PPCK),False

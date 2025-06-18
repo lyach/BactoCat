@@ -1,0 +1,17 @@
+ecomics_rxn_id,ecomics_rxn,bigg_id,gem_rxn_match,dice_score,gem_rxn_id,ecomics_rxn_type,to_check
+R0044,Exch. (G6P <-> F6P),na,man6p_c <=> f6p_c,0.5,MAN6PI,Phosphoglucose isomerase (G6P↔F6P),True
+R0047,Exch. (S7P + G3P <-> E4P + F6P),na,g3p_c + s7p_c <=> e4p_c + f6p_c,0.5,TALA,Transketolase (TKT1),False
+R0030,PYR -> Lactate,na,pyr_e <=> pyr_p,0.5,PYRtex,Lactate dehydrogenase (PYR→LAC),True
+R0095,MEETHF + NADH -> METHF + NAD,na,nad_c + nadph_c --> nadh_c + nadp_c,0.5,NADTRHD,Methylene-THF reductase,True
+R0089,2 Pyr + AcCoA + Glu + NADPH + NAD -> Leu + 2 CO2 + AKG + NADP + NADH,na,coa_c + nad_c + pyr_c --> accoa_c + co2_c + nadh_c,0.5,PDH,Leucine biosynthesis (IPMS step),True
+R0048,Exch. (X5P + E4P <-> F6P + G3P),na,g3p_c + s7p_c <=> e4p_c + f6p_c,0.5,TALA,Transketolase (TKT2),True
+R0033,F6P -> (Cell synthesis),na,man6p_c <=> f6p_c,0.5,MAN6PI,F6P to biomass precursor,True
+R0032,G6P -> (Cell synthesis),na,g1p_c <=> g6p_c,0.5,PGMT,G6P to biomass precursor,True
+R0097,NADH + 0.5 O2 + 2 ADP + 2 Pi -> 2 ATP + NAD,na,h_c + nadh_c + o2_c + pppn_c --> cechddd_c + nad_c,0.5,PPPNDO,Oxidative phosphorylation (Complex I & ATP synthase lumped),True
+R0088,2 Pyr + NADPH + Glu -> Val + CO2 + NADP + AKG,na,icit_c + nadp_c <=> akg_c + co2_c + nadph_c,0.5,ICDHyr,Valine biosynthesis (IlvE pathway),True
+R0099,NADH + NADP <=> NADPH + NAD (net),na,nad_c + nadph_c --> nadh_c + nadp_c,0.5,NADTRHD,Transhydrogenase (PntAB),False
+R0091,E4P + 2 PEP + Glu + NADPH + ATP -> Phe + CO2 + AKG + NADP + ADP + 4 Pi,na,atp_c + oaa_c --> adp_c + co2_c + pep_c,0.5,PPCK,Phenylalanine biosynthesis,True
+R0102,CO2 -> CO2.Ext,na,co2_p <=> co2_c,0.5,CO2tpp,CO2 transport,False
+R0103,O2.Ext -> O2,na,o2_p <=> o2_c,0.5,O2tpp,O2 transport,False
+R0105,SO4.Ext -> SO4,na,so4_e <=> so4_p,0.5,SO4tex,Sulfate transport,False
+R0108,GAP + NAD + ADP + Pi <=> 3PG + ATP + NADH (exch),na,atp_c + h2o_c --> adp_c + h_c + pi_c,0.5,ATPM,GAPDH + PGK combined,True

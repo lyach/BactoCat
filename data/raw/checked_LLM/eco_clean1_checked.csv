@@ -1,0 +1,18 @@
+ecomics_rxn_id,ecomics_rxn,bigg_id,gem_rxn_match,dice_score,gem_rxn_id,ecomics_rxn_type,to_check
+R0118,Ser + THF <=> Gly + MEETHF (exch);Ser + THF <=> Gly + MEETHF (net),na,gly_e <=> gly_p,0.25,GLYtex,serine hydroxymethyltransferase,True
+R0076,OAC + Glu -> Asp + AKG,na,akg_e <=> akg_p,0.333,AKGtex,aspartate transaminase,True
+R0066,F6P <=> GAP + E-C3 (net);F6P <=> GAP + E-C3 (exch),na,man6p_c <=> f6p_c,0.333,MAN6PI,transaldolase (PPP),True
+R0037,3PG -> (Cell synthesis),na,3pg_c + atp_c <=> 13dpg_c + adp_c,0.333,PGK,3PG to biomass precursor,True
+R0067,S7P <=> E4P + E-C3 (net),na,s17bp_c <=> dhap_c + e4p_c,0.333,FBA3,transketolase (PPP),True
+R0031,AcCoA -> Ethanol,na,coa_c + pyr_c --> accoa_c + for_c,0.333,PFL,acetyl-CoA to ethanol (fermentation),True
+R0050,Exch. (PEP + CO2 <-> OAA),na,tartr__L_c --> h2o_c + oaa_c,0.333,TARTD,PEP + CO2 <-> OAA exchange,True
+R0040,AcCoA -> (Cell synthesis),na,coa_c + pyr_c --> accoa_c + for_c,0.333,PFL,acetyl-CoA to biomass precursor,True
+R0024,PEP + CO2 <-> OAA,PPC;PPCK,2pg_c <=> h2o_c + pep_c,0.333,ENO,PEP carboxylase/kinase,True
+R0115,Suc + FAD <=> Fum + FADH2 (exch),na,fum_e <=> fum_p,0.333,FUMtex,succinate dehydrogenase,True
+R0116,ICit <=> Glyox + Suc (exch),na,acon_C_c + h2o_c <=> icit_c,0.333,ACONTb,isocitrate lyase,True
+R0068,6PG -> KDPG,na,3pg_c + atp_c <=> 13dpg_c + adp_c,0.333,PGK,6PG dehydratase (Entner-Doudoroff),True
+R0100,ATP -> ATP.Ext,na,atp_c + dgdp_c <=> adp_c + dgtp_c,0.333,NDPK5,ATP transport,True
+R0075,Glu + CO2 + Gln + NADPH + Asp + AcCoA + 5 ATP -> Arg + AKG + NADP + Fum + A,na,icit_c + nadp_c <=> akg_c + co2_c + nadph_c,0.353,ICDHyr,arginine biosynthesis (complex),True
+R0093,E4P + 2 PEP + R5P + Ser + Gln + NADPH + 3 ATP -> Trp + CO2 + Pyr + GAP + Gl,na,atp_c + oaa_c --> adp_c + co2_c + pep_c,0.353,PPCK,tryptophan biosynthesis (complex),True
+R0084,Asp + Pyr + Glu + 2 NADPH + ATP + SucCoA -> LL-DAP + AKG + 2 NADP + ADP + P,na,adp_c + h_c + pep_c --> atp_c + pyr_c,0.375,PYK,lysine/DAP biosynthesis,True
+R0092,E4P + 2 PEP + Glu + NADPH + NAD + ATP -> Tyr + CO2 + AKG + NADP + NADH + AD,na,nad_c + nadph_c --> nadh_c + nadp_c,0.375,NADTRHD,tyrosine biosynthesis (complex),True

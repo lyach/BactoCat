@@ -1,0 +1,90 @@
+ecomics_rxn_id,ecomics_rxn
+R0007,3PG <-> PEP
+R0018,CIT -> ICT
+R0020,2-KG -> SUC + CO2
+R0028,6-PG -> G3P + PYR
+R0030,PYR -> Lactate
+R0031,AcCoA -> Ethanol
+R0032,G6P -> (Cell synthesis)
+R0033,F6P -> (Cell synthesis)
+R0034,R5P -> (Cell synthesis)
+R0035,E4P -> (Cell synthesis)
+R0036,G3P -> (Cell synthesis)
+R0037,3PG -> (Cell synthesis)
+R0038,PEP -> (Cell synthesis)
+R0039,PYR -> (Cell synthesis)
+R0040,AcCoA -> (Cell synthesis)
+R0041,OAA -> (Cell synthesis)
+R0042,2KG -> (Cell synthesis)
+R0043,CO2 -> (Evolution)
+R0044,Exch. (G6P <-> F6P)
+R0045,Exch. (3PG <-> PEP)
+R0046,Exch. (R5P + X5P <-> S7P + G3P)
+R0047,Exch. (S7P + G3P <-> E4P + F6P)
+R0048,Exch. (X5P + E4P <-> F6P + G3P)
+R0049,Exch. (MAL <-> OAA)
+R0050,Exch. (PEP + CO2 <-> OAA)
+R0051,Glucose consumption rate
+R0052,Oxygen uptake rate (OUR)
+R0053,Carbon dioxide evolution rate (CER)
+R0054,NADPH -> NADH
+R0055,O2+ 2 NADH -> ATP
+R0056,OGA -> MAL + CO2 + 1.5ATP + 2 NADH
+R0057,PYR => ACA + FOR
+R0059,Exch. (F16P <=> DHAP + G3P)
+R0060,Exch. DHAP <=> G3P
+R0061,Exch. Ru5P <=> X5P
+R0062,Exch. Ru5P <=> R5P
+R0063,Exch. FUM <=> MAL
+R0064,F6P <=> E4P + E-C2 (net);F6P <=> E4P + E-C2 (exch)
+R0065,S7P <=> R5P + E-C2 (net)
+R0066,F6P <=> GAP + E-C3 (net);F6P <=> GAP + E-C3 (exch)
+R0067,S7P <=> E4P + E-C3 (net)
+R0068,6PG -> KDPG
+R0069,KDPG -> GAP + Pyr
+R0070,OAC + ATP -> PEP + CO2 + ADP
+R0071,AcCoA + ADP + Pi <=> Ac + ATP (net);AcCoA + ADP + Pi <=> Ac + ATP (exch)
+R0072,AKG + NADPH + NH3 -> Glu + NADP
+R0073,Glu + ATP + NH3 -> Gln + ADP + Pi
+R0074,Glu + 2 NADPH + ATP -> Pro + 2 NADP + ADP + Pi
+R0075,Glu + CO2 + Gln + NADPH + Asp + AcCoA + 5 ATP -> Arg + AKG + NADP + Fum + A
+R0076,OAC + Glu -> Asp + AKG
+R0077,Asp + NH3 + 2 ATP -> Asn + 2 ADP + 2 Pi
+R0078,Pyr + Glu -> Ala + AKG
+R0079,3PG + Glu + NAD -> Ser + NADH + AKG + Pi
+R0082,Thr + NAD -> Gly + AcCoA + NADH
+R0083,Ser + AcCoA + SO4 + 3 ATP + 4 NADPH -> Cys + Ac + 4 NADP + 3 ADP + 3 Pi
+R0084,Asp + Pyr + Glu + 2 NADPH + ATP + SucCoA -> LL-DAP + AKG + 2 NADP + ADP + P
+R0085,LL-DAP -> Lys + CO2
+R0086,Asp + 2 NADPH + 2 ATP -> Thr + 2 NADP + 2 ADP + 2 Pi
+R0087,Asp + METHF + Cys + 2 NADPH + ATP + SucCoA -> Met + Pyr + 2 NADP + ADP + Pi
+R0088,2 Pyr + NADPH + Glu -> Val + CO2 + NADP + AKG
+R0089,2 Pyr + AcCoA + Glu + NADPH + NAD -> Leu + 2 CO2 + AKG + NADP + NADH
+R0090,Thr + Pyr + Glu + NADPH -> Ile + CO2 + AKG + NADP + NH3
+R0091,E4P + 2 PEP + Glu + NADPH + ATP -> Phe + CO2 + AKG + NADP + ADP + 4 Pi
+R0092,E4P + 2 PEP + Glu + NADPH + NAD + ATP -> Tyr + CO2 + AKG + NADP + NADH + AD
+R0093,E4P + 2 PEP + R5P + Ser + Gln + NADPH + 3 ATP -> Trp + CO2 + Pyr + GAP + Gl
+R0094,R5P + FTHF + Gln + Asp + 5 ATP + 2 NAD -> His + 2 NADH + AKG + Fum + 5 ADP
+R0095,MEETHF + NADH -> METHF + NAD
+R0096,MEETHF + NADP -> FTHF + NADPH
+R0097,NADH + 0.5 O2 + 2 ADP + 2 Pi -> 2 ATP + NAD
+R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD
+R0099,NADH + NADP <=> NADPH + NAD (net)
+R0100,ATP -> ATP.Ext
+R0101,Ac -> Ac.Ext
+R0102,CO2 -> CO2.Ext
+R0103,O2.Ext -> O2
+R0104,NH3.Ext -> NH3
+R0105,SO4.Ext -> SO4
+R0106,0.488 Ala + 0.281 Arg + 0.229 Asn + 0.229 Asp + 0.087 Cys + 0.25 Glu + 0.25
+R0107,CO2.unlabeled + CO2 -> CO2 + CO2.out
+R0108,GAP + NAD + ADP + Pi <=> 3PG + ATP + NADH (exch)
+R0110,S7P <=> R5P + E-C2 (exch)
+R0112,Cit <=> ICit (exch)
+R0113,ICit + NADP <=> AKG + CO2 + NADPH (exch)
+R0114,SucCoA + ADP + Pi <=> Suc + ATP (exch)
+R0115,Suc + FAD <=> Fum + FADH2 (exch)
+R0116,ICit <=> Glyox + Suc (exch)
+R0118,Ser + THF <=> Gly + MEETHF (exch);Ser + THF <=> Gly + MEETHF (net)
+R0119,Gly + THF + NAD <=> CO2 + MEETHF + NH3 + NADH (exch);Gly + THF + NAD <=> CO2 + MEETHF + NH3 + NADH (net)
+R0120,F6P + ATP -> 2 T3P

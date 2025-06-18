@@ -1,0 +1,11 @@
+ecomics_rxn_id,ecomics_rxn,bigg_id,gem_rxn_match,dice_score,gem_rxn_id,ecomics_rxn_type
+R0042,2KG -> (Cell synthesis),na,,,,α-ketoglutarate assimilation to biomass
+R0051,Glucose consumption rate,na,,,,Glucose uptake
+R0052,Oxygen uptake rate (OUR),na,,,,O₂ uptake rate
+R0053,Carbon dioxide evolution rate (CER),na,,,,CO₂ evolution rate
+R0057,PYR => ACA + FOR,na,,,,Pyruvate formate-lyase (PFL)
+R0058,SUC =>,EX_succ(e),,,,Succinate export
+R0061,Exch. Ru5P <=> X5P,na,,,,Ribulose-5-P 3-epimerase (Ru5P ↔ X5P)
+R0063,Exch. FUM <=> MAL,na,,,,Fumarase (Fumarate ↔ Malate)
+R0104,NH3.Ext -> NH3,na,,,,Ammonia uptake
+R0106,0.488 Ala + 0.281 Arg + 0.229 Asn + 0.229 Asp + 0.087 Cys + 0.25 Glu + 0.25,na,,,,Amino-acid incorporation into biomass
