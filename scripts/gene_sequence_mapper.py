@@ -1,3 +1,18 @@
+"""
+Module Description: gene_sequence_mapper.py
+
+Purpose: 
+Recover protein sequences using the gene IDs annotated in genome-scale models.
+
+Overview: 
+This module provides functions to:
+1. Map gene IDs from a genome-scale model (GEM) to UniProt IDs, including retrieving EC numbers and protein sequences.
+2. Map Ensembl Gene IDs (ENSG) to Ensembl Protein IDs (ENSP) and further to UniProt IDs.
+3. Map PaxDB IDs to UniProt IDs and sequences.
+4. Save the mapping results to CSV files for further analysis.
+
+"""
+
 import cobra
 import pandas as pd
 import os
@@ -10,18 +25,16 @@ def map_gem_genes_to_uniprot(model_id, organism):
     Map gene IDs from a GEM to UniProt IDs.
     
     Parameters:
-    -----------
-    model_id : str
-        ID of the model (e.g., 'iML1515') to load using COBRA's model repository.
-        Path to the model file if not using the cobra repository.
-    organism : str
-        Organism name for UniProt queries, must match model organism
+        model_id : str
+            ID of the model (e.g., 'iML1515') to load using COBRA's model repository.
+            Path to the model file if not using the cobra repository.
+        organism : str
+            Organism name for UniProt queries, must match model organism
         
     Returns:
-    --------
-    pandas.DataFrame
-        DataFrame containing the mapping between model gene IDs and UniProt IDs,
-        with columns: model_gene_id, uniprot_id, ec_number, sequence
+        pandas.DataFrame
+            DataFrame containing the mapping between model gene IDs and UniProt IDs,
+            with columns: model_gene_id, uniprot_id, ec_number, sequence
     """
         
     # Set taxon ID based on organism
@@ -138,14 +151,12 @@ def ENSG_to_ENSP(model_id):
     Map ENSG IDs to ENSP IDs for a given model.
     
     Parameters:
-    -----------
-    model_id : str
-        ID of the model (e.g., 'iML1515') to load using COBRA's model repository.
-        Path to the model file if not using the cobra repository.
+        model_id : str
+            ID of the model (e.g., 'iML1515') to load using COBRA's model repository.
+            Path to the model file if not using the cobra repository.
         
     Returns:
-    --------
-    pandas.DataFrame    
+        pandas.DataFrame    
     """
     
     # Load the model
@@ -214,16 +225,14 @@ def map_ENSP_to_UniProt(ENSP_df, taxon_ID="9606"):
     Map ENSP IDs to UniProt IDs and sequences for a given model.
     
     Parameters:
-    -----------
-    ENSP_df : pandas.DataFrame
-        DataFrame containing the mapping between model gene IDs and UniProt IDs,
-        with columns: model_gene_id, uniprot_id, ec_number, sequence
-    taxon_ID : str
-        Taxon ID for UniProt queries, must match model organism
+        ENSP_df : pandas.DataFrame
+            DataFrame containing the mapping between model gene IDs and UniProt IDs,
+            with columns: model_gene_id, uniprot_id, ec_number, sequence
+         taxon_ID : str
+            Taxon ID for UniProt queries, must match model organism
         
     Returns:
-    --------
-    pandas.DataFrame
+        pandas.DataFrame
     """
         
     # Initialize UniProt service
@@ -315,16 +324,14 @@ def map_PaxDB_to_UniProt(PaxDB_df, taxon_ID="9606"):
     Map PaxDB IDs to UniProt IDs and sequences.
     
     Parameters:
-    -----------
-    PaxDB_df : pandas.DataFrame
-        DataFrame containing PaxDB IDs (must have a 'PaxDB_ID' column)
-    taxon_ID : str
-        Taxon ID for UniProt queries, must match model organism
+        PaxDB_df : pandas.DataFrame
+            DataFrame containing PaxDB IDs (must have a 'PaxDB_ID' column)
+        taxon_ID : str
+            Taxon ID for UniProt queries, must match model organism
         
     Returns:
-    --------
-    pandas.DataFrame
-        DataFrame containing the mapping with all original columns plus UniProt data
+        pandas.DataFrame
+            DataFrame containing the mapping with all original columns plus UniProt data
     """
         
     # Initialize UniProt service
