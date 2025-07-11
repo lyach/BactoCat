@@ -123,7 +123,11 @@ def _apply_medium_conditions(model: cobra.Model, medium_id: str) -> None:
         # M9+Glu medium
         print("Applying M9+Glu medium")
         medium = {
-            "EX_glc__D_e": -10
+            "EX_glc__D_e": -10,
+            "EX_nh4_e": -5.01,
+            "EX_so4_e": -1.7,
+            "EX_o2_e": -15.86,
+            "EX_co2_e": -17.52
         }
     
     # Apply the medium by setting lower bounds
@@ -259,8 +263,7 @@ def create_fluxomics_dataframe(exp_fluxes: str, modified_gem: cobra.Model):
     
     for rxn_id in fluxomics_df.index:
         if rxn_id in exp_mapping:
-            # If multiple matches, take the first one
-            exp_data = exp_mapping[rxn_id][0]
+            exp_data = exp_mapping[rxn_id][0] # If multiple matches, take the first one - TO DO: Manually correct these
             exp_reactions.append(exp_data['exp_reaction'])
             exp_fluxes.append(exp_data['exp_flux'])
             

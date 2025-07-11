@@ -22,7 +22,7 @@ R0039,PYR -> (Cell synthesis),,,implicit in biomass reaction
 R0040,AcCoA -> (Cell synthesis),,,implicit in biomass reaction
 R0041,OAA -> (Cell synthesis),,,implicit in biomass reaction
 R0042,2KG -> (Cell synthesis),,,implicit in biomass reaction
-R0043,CO2 -> (Evolution),EX_co2_e,,1 rxn direct
+R0043,CO2 -> (Evolution),EX_co2_e,,"1 rxn exchange, TO CHECK"
 R0044,Exch. (G6P <-> F6P),PGI,,1 rxn direct
 R0045,Exch. (3PG <-> PEP),PGM,,2 rxn multistep
 R0045,Exch. (3PG <-> PEP),ENO,,2 rxn multistep
@@ -32,9 +32,9 @@ R0048,Exch. (X5P + E4P <-> F6P + G3P),TKT2,,1 rxn direct
 R0049,Exch. (MAL <-> OAA),MDH,,1 rxn direct
 R0050,Exch. (PEP + CO2 <-> OAA),PPC,,2 rxn multistep
 R0050,Exch. (PEP + CO2 <-> OAA),PPCK,,2 rxn multistep
-R0051,Glucose consumption rate,,,rate measurement
-R0052,Oxygen uptake rate (OUR),,,rate measurement
-R0053,Carbon dioxide evolution rate (CER),,,rate measurement
+R0051,Glucose consumption rate,EX_glc__D_e,,"rate measurement, linked to 1 exchange reaction"
+R0052,Oxygen uptake rate (OUR),EX_o2_e,,"rate measurement, , linked to 1 exchange reaction"
+R0053,Carbon dioxide evolution rate (CER),EX_co2_e,,"rate measurement, linked to 1 exchange reaction"
 R0054,NADPH -> NADH,NADTRHD,,1 rxn direct
 R0055,O2+ 2 NADH -> ATP,,,simplified representation of oxidative phosphorylation
 R0056,OGA -> MAL + CO2 + 1.5ATP + 2 NADH,,,unidentified
@@ -153,12 +153,12 @@ R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD,ATPS4rpp,,4 rxn multistep
 R0099,NADH + NADP <=> NADPH + NAD (net),NADTRHD,,1 rxn direct
 R0100,ATP -> ATP.Ext,,,implicit in biomass reaction
 R0101,Ac -> Ac.Ext,EX_ac_e,,3 rxn exchange and transport
-R0101,Ac -> Ac.Ext,EX_ac_e,,3 rxn exchange and transport
-R0101,Ac -> Ac.Ext,EX_ac_e,,3 rxn exchange and transport
+R0101,Ac -> Ac.Ext,ACtex,,3 rxn exchange and transport
+R0101,Ac -> Ac.Ext,ACt2rpp,,3 rxn exchange and transport
 R0102,CO2 -> CO2.Ext,EX_co2_e,,2 rxn exchange and transport
-R0102,CO2 -> CO2.Ext,EX_co2_e,,2 rxn exchange and transport
+R0102,CO2 -> CO2.Ext,CO2tpp,,2 rxn exchange and transport
 R0103,O2.Ext -> O2,EX_o2_e,,2 rxn exchange and transport
-R0103,O2.Ext -> O2,EX_o2_e,,2 rxn exchange and transport
+R0103,O2.Ext -> O2,O2tpp,,2 rxn exchange and transport
 R0104,NH3.Ext -> NH3,EX_nh4_e,,2 rxn exchange and transport
 R0104,NH3.Ext -> NH3,NH4tpp,,2 rxn exchange and transport
 R0105,SO4.Ext -> SO4,EX_so4_e,,3 rxn exchange and transport
@@ -173,7 +173,7 @@ R0110,S7P <=> R5P + E-C2 (exch),TKT1,,1 rxn direct
 R0112,Cit <=> ICit (exch),ACONTa,,2 rxn multistep
 R0112,Cit <=> ICit (exch),ACONTb,,2 rxn multistep
 R0113,ICit + NADP <=> AKG + CO2 + NADPH (exch),ICDHyr,,1 rxn direct
-R0114,SucCoA + ADP + Pi <=> Suc + ATP (exch),SUCCOAS,,1 rxn direct
+R0114,SucCoA + ADP + Pi <=> Suc + ATP (exch),SUCOAS,,1 rxn direct
 R0115,Suc + FAD <=> Fum + FADH2 (exch),SUCDi,,1 rxn direct
 R0116,ICit <=> Glyox + Suc (exch),ICL,,1 rxn direct
 R0118,Ser + THF <=> Gly + MEETHF (exch);Ser + THF <=> Gly + MEETHF (net),GHMT2r,,1 rxn direct
