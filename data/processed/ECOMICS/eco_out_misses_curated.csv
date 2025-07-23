@@ -1,4 +1,5 @@
 ecomics_rxn_id,ecomics_rxn,gem_rxn_id,gem_rxn,note
+R0001,Glucose + PEP -> G6P + PYR,EX_glc__D_e,,glucose uptake
 R0007,3PG <-> PEP,ENO,,2 rxn multistep
 R0007,3PG <-> PEP,PGM,,2 rxn multistep
 R0018,CIT -> ICT,ACONTb,,2 rxn multistep
@@ -22,19 +23,19 @@ R0039,PYR -> (Cell synthesis),,,implicit in biomass reaction
 R0040,AcCoA -> (Cell synthesis),,,implicit in biomass reaction
 R0041,OAA -> (Cell synthesis),,,implicit in biomass reaction
 R0042,2KG -> (Cell synthesis),,,implicit in biomass reaction
-R0043,CO2 -> (Evolution),EX_co2_e,,"1 rxn exchange, TO CHECK"
+R0043,CO2 -> (Evolution),,,co2 exchange (ambiguous)
 R0044,Exch. (G6P <-> F6P),PGI,,1 rxn direct
 R0045,Exch. (3PG <-> PEP),PGM,,2 rxn multistep
 R0045,Exch. (3PG <-> PEP),ENO,,2 rxn multistep
-R0046,Exch. (R5P + X5P <-> S7P + G3P),TKT1,,1 rxn direct
-R0047,Exch. (S7P + G3P <-> E4P + F6P),TALA,,1 rxn direct
+R0046,Exch. (R5P + X5P <-> S7P + G3P),TKT1,,1 rxn direct (ambiguous TKT1)
+R0047,Exch. (S7P + G3P <-> E4P + F6P),TALA,,1 rxn direct (ambiguous TALA)
 R0048,Exch. (X5P + E4P <-> F6P + G3P),TKT2,,1 rxn direct
 R0049,Exch. (MAL <-> OAA),MDH,,1 rxn direct
 R0050,Exch. (PEP + CO2 <-> OAA),PPC,,2 rxn multistep
 R0050,Exch. (PEP + CO2 <-> OAA),PPCK,,2 rxn multistep
-R0051,Glucose consumption rate,EX_glc__D_e,,"rate measurement, linked to 1 exchange reaction"
-R0052,Oxygen uptake rate (OUR),EX_o2_e,,"rate measurement, , linked to 1 exchange reaction"
-R0053,Carbon dioxide evolution rate (CER),EX_co2_e,,"rate measurement, linked to 1 exchange reaction"
+R0051,Glucose consumption rate,,,"rate measurement, linked to 1 exchange reaction"
+R0052,Oxygen uptake rate (OUR),,,"rate measurement, , linked to 1 exchange reaction"
+R0053,Carbon dioxide evolution rate (CER),,,"rate measurement, linked to 1 exchange reaction"
 R0054,NADPH -> NADH,NADTRHD,,1 rxn direct
 R0055,O2+ 2 NADH -> ATP,,,simplified representation of oxidative phosphorylation
 R0056,OGA -> MAL + CO2 + 1.5ATP + 2 NADH,,,unidentified
@@ -146,35 +147,40 @@ R0096,MEETHF + NADP -> FTHF + NADPH,FTHFLi,,2 rxn multistep (ambiguous)
 R0097,NADH + 0.5 O2 + 2 ADP + 2 Pi -> 2 ATP + NAD,NADH5,,3 rxn multistep
 R0097,NADH + 0.5 O2 + 2 ADP + 2 Pi -> 2 ATP + NAD,CYTBO3_4pp,,3 rxn multistep
 R0097,NADH + 0.5 O2 + 2 ADP + 2 Pi -> 2 ATP + NAD,ATPS4rpp,,3 rxn multistep
-R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD,SUCDi,,4 rxn multistep
+R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD,SUCDi,,4 rxn multistep (ambiguous SUCDi)
 R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD,NADH5,,4 rxn multistep
 R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD,CYTBO3_4pp,,4 rxn multistep
 R0098,FADH2 + 0.5 O2 + ADP + Pi -> ATP + FAD,ATPS4rpp,,4 rxn multistep
 R0099,NADH + NADP <=> NADPH + NAD (net),NADTRHD,,1 rxn direct
 R0100,ATP -> ATP.Ext,,,implicit in biomass reaction
-R0101,Ac -> Ac.Ext,EX_ac_e,,3 rxn exchange and transport
-R0101,Ac -> Ac.Ext,ACtex,,3 rxn exchange and transport
-R0101,Ac -> Ac.Ext,ACt2rpp,,3 rxn exchange and transport
-R0102,CO2 -> CO2.Ext,EX_co2_e,,2 rxn exchange and transport
-R0102,CO2 -> CO2.Ext,CO2tpp,,2 rxn exchange and transport
-R0103,O2.Ext -> O2,EX_o2_e,,2 rxn exchange and transport
-R0103,O2.Ext -> O2,O2tpp,,2 rxn exchange and transport
-R0104,NH3.Ext -> NH3,EX_nh4_e,,2 rxn exchange and transport
-R0104,NH3.Ext -> NH3,NH4tpp,,2 rxn exchange and transport
-R0105,SO4.Ext -> SO4,EX_so4_e,,3 rxn exchange and transport
-R0105,SO4.Ext -> SO4,SULabcpp,,3 rxn exchange and transport
-R0105,SO4.Ext -> SO4,SO4t2pp,,3 rxn exchange and transport
+R0101,Ac -> Ac.Ext,EX_ac_e,,4 rxn exchange and transport
+R0101,Ac -> Ac.Ext,ACtex,,4 rxn exchange and transport
+R0101,Ac -> Ac.Ext,ACt4pp,,4 rxn exchange and transport
+R0101,Ac -> Ac.Ext,ACt2rpp,,4 rxn exchange and transport
+R0102,CO2 -> CO2.Ext,EX_co2_e,,3 rxn exchange and transport
+R0102,CO2 -> CO2.Ext,CO2tex,,3 rxn exchange and transport
+R0102,CO2 -> CO2.Ext,CO2tpp,,3 rxn exchange and transport
+R0103,O2.Ext -> O2,EX_o2_e,,3 rxn exchange and transport
+R0103,O2.Ext -> O2,O2tex,,3 rxn exchange and transport
+R0103,O2.Ext -> O2,O2tpp,,3 rxn exchange and transport
+R0104,NH3.Ext -> NH3,EX_nh4_e,,3 rxn exchange and transport
+R0104,NH3.Ext -> NH3,NH4tex,,3 rxn exchange and transport
+R0104,NH3.Ext -> NH3,NH4tpp,,3 rxn exchange and transport - ammonia movement from peryplasm to cytoplasm might differ
+R0105,SO4.Ext -> SO4,EX_so4_e,,4 rxn exchange and transport
+R0105,SO4.Ext -> SO4,SULabcpp,,4 rxn exchange and transport
+R0105,SO4.Ext -> SO4,SO4tex,,4 rxn exchange and transport
+R0105,SO4.Ext -> SO4,SO4t2pp,,4 rxn exchange and transport
 R0106,0.488 Ala + 0.281 Arg + 0.229 Asn + 0.229 Asp + 0.087 Cys + 0.25 Glu + 0.25,BIOMASS_Ec_iML1515_core_75p37M,,biomass
 R0106,0.488 Ala + 0.281 Arg + 0.229 Asn + 0.229 Asp + 0.087 Cys + 0.25 Glu + 0.25,BIOMASS_Ec_iML1515_WT_75p37M,,biomass
 R0107,CO2.unlabeled + CO2 -> CO2 + CO2.out,,,unidentified
 R0108,GAP + NAD + ADP + Pi <=> 3PG + ATP + NADH (exch),GAPD,,2 rxn multistep
 R0108,GAP + NAD + ADP + Pi <=> 3PG + ATP + NADH (exch),PGK,,2 rxn multistep
-R0110,S7P <=> R5P + E-C2 (exch),TKT1,,1 rxn direct
+R0110,S7P <=> R5P + E-C2 (exch),TKT1,,1 rxn direct (ambiguous  TKT1)
 R0112,Cit <=> ICit (exch),ACONTa,,2 rxn multistep
 R0112,Cit <=> ICit (exch),ACONTb,,2 rxn multistep
 R0113,ICit + NADP <=> AKG + CO2 + NADPH (exch),ICDHyr,,1 rxn direct
 R0114,SucCoA + ADP + Pi <=> Suc + ATP (exch),SUCOAS,,1 rxn direct
-R0115,Suc + FAD <=> Fum + FADH2 (exch),SUCDi,,1 rxn direct
+R0115,Suc + FAD <=> Fum + FADH2 (exch),SUCOAS,,1 rxn direct (ambiguous SUCOAS)
 R0116,ICit <=> Glyox + Suc (exch),ICL,,1 rxn direct
 R0118,Ser + THF <=> Gly + MEETHF (exch);Ser + THF <=> Gly + MEETHF (net),GHMT2r,,1 rxn direct
 R0119,Gly + THF + NAD <=> CO2 + MEETHF + NH3 + NADH (exch);Gly + THF + NAD <=> CO2 + MEETHF + NH3 + NADH (net),GLYCL,,1 rxn direct

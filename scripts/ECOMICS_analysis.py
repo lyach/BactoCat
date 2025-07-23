@@ -94,12 +94,9 @@ def _apply_medium_conditions(model: cobra.Model, medium_id: str) -> None:
             Medium identifier
     """
     
-    """
-    TO DO: Check medium composition
-    """
-    
     if medium_id == 'MD066':
         # synthetic+Glu medium
+        # TODO: add medium composition
         print("Applying synthetic+Glu medium")
         medium = {
             "EX_glc__D_e": -10
@@ -107,6 +104,7 @@ def _apply_medium_conditions(model: cobra.Model, medium_id: str) -> None:
         
     elif medium_id == 'MD004':
         # synthetic+Glu medium with higher glucose uptake
+        # TODO: add medium composition
         print("Applying synthetic+Glu medium with higher glucose uptake")
         medium = {
             "EX_glc__D_e": -10
@@ -114,20 +112,24 @@ def _apply_medium_conditions(model: cobra.Model, medium_id: str) -> None:
     
     elif medium_id == 'MD120':
         # MOPS+Glu(0.4%) medium
+        # TODO: add medium composition
         print("Applying MOPS+Glu(0.4%) medium")
         medium = {
             "EX_glc__D_e": -10
         }
     
-    elif medium_id == 'MD121':  
+    elif medium_id == 'MD121':
         # M9+Glu medium
+        # NH4 and SO4 bounds were discarded, as they arent't growth limiting
+        # Biomass flux and overall correlation improves by doing this
         print("Applying M9+Glu medium")
         medium = {
             "EX_glc__D_e": -10,
-            "EX_nh4_e": -5.01,
-            "EX_so4_e": -1.7,
+            #"EX_nh4_e": -5.01, 
+            #"EX_so4_e": -1.7,
             "EX_o2_e": -15.86,
-            "EX_co2_e": -17.52
+            "EX_co2_e": 17.52,
+            "EX_h2o_e": -6.96
         }
     
     # Apply the medium by setting lower bounds
@@ -191,11 +193,14 @@ def _apply_stress_conditions(model: cobra.Model, stress: str) -> None:
         pass
     
     
-def create_fluxomics_dataframe(exp_fluxes: str, modified_gem: cobra.Model):
+def create_fluxomics_dataframe(method: str, exp_fluxes: str, 
+                               modified_gem: cobra.Model):
     """
     Create a dataframe with experimental, FBA and pFBA fluxomics results.
     
     Parameters:
+        method: str
+            Method for the flux simulations: 'FBA' or 'pFBA'
         exp_fluxes: str
             Path to the 'fluxomics_{condition_string}.csv' file
         modified_gem: cobra.Model
@@ -212,28 +217,27 @@ def create_fluxomics_dataframe(exp_fluxes: str, modified_gem: cobra.Model):
     exp_fluxes_df = exp_fluxes_df.dropna(subset=['exp_reaction'])
 
     # Run FBA and pFBA with status checks
-    fba_solution = modified_gem.optimize()
-    print(f"FBA status: {fba_solution.status}")
-    if fba_solution.status != 'optimal':
-        print("FBA optimization did not succeed.")
-        return None, None, None
-
-    pFBA_solution = flux_analysis.pfba(modified_gem)
-    print(f"pFBA status: {pFBA_solution.status}")
-    if pFBA_solution.status != 'optimal':
-        print("pFBA optimization did not succeed.")
-        return None, None, None
+    if method == 'FBA':
+        solution = modified_gem.optimize()
+        print(f"FBA status: {solution.status}")
+        if solution.status != 'optimal':
+            print("FBA optimization did not succeed.")
+            return None, None, None
+    elif method == 'pFBA':
+        solution = flux_analysis.pfba(modified_gem)
+        print(f"pFBA status: {solution.status}")
+        if solution.status != 'optimal':
+            print("pFBA optimization did not succeed.")
+            return None, None, None
+    else:
+        raise ValueError(f"Invalid method '{method}'. Must be 'FBA' or 'pFBA'.")
     
     # Extract fluxes and create DataFrames
-    fba_df = pd.DataFrame.from_dict(fba_solution.fluxes.to_dict(), orient='index', columns=['FBA_flux'])
-    pFBA_df = pd.DataFrame.from_dict(pFBA_solution.fluxes.to_dict(), orient='index', columns=['pFBA_flux'])
+    method_flux = f'{method}_flux'
+    fluxomics_df = pd.DataFrame.from_dict(solution.fluxes.to_dict(), orient='index', columns=[method_flux])
 
     # Set index name
-    for df in [fba_df, pFBA_df]:
-        df.index.name = 'rxn_id'
-    
-    # Create dataframe with FBA and pFBA fluxes
-    fluxomics_df = pd.concat([fba_df, pFBA_df], axis=1)
+    fluxomics_df.index.name = 'rxn_id'
     
     # Process experimental data for matching
     # Extract base reaction names by removing prefixes like 'R0091_'
@@ -251,7 +255,7 @@ def create_fluxomics_dataframe(exp_fluxes: str, modified_gem: cobra.Model):
             exp_mapping[base_rxn] = []
         exp_mapping[base_rxn].append({
             'exp_reaction': row['exp_reaction'],
-            'exp_flux': row['exp_flux']
+            'exp_flux': row['exp_flux']/10 # scale the experimental fluxes column by the glucose uptake rate (-10 mM/h)
         })
     
     # Track matched experimental reactions
@@ -263,16 +267,19 @@ def create_fluxomics_dataframe(exp_fluxes: str, modified_gem: cobra.Model):
     
     for rxn_id in fluxomics_df.index:
         if rxn_id in exp_mapping:
-            exp_data = exp_mapping[rxn_id][0] # If multiple matches, take the first one - TO DO: Manually correct these
-            exp_reactions.append(exp_data['exp_reaction'])
-            exp_fluxes.append(exp_data['exp_flux'])
+            # Find the experimental data with the closest match to the method flux, ignoring sign
+            method_flux_value = abs(fluxomics_df.at[rxn_id, method_flux])
+            closest_match = min(exp_mapping[rxn_id], key=lambda x: abs(abs(x['exp_flux']) - method_flux_value))
+            
+            exp_reactions.append(closest_match['exp_reaction'])
+            exp_fluxes.append(closest_match['exp_flux'])
             
             # Track matched reactions
             matched_exp_reactions.add(rxn_id)
             
             # Print info about multiple matches
             if len(exp_mapping[rxn_id]) > 1:
-                print(f"Multiple experimental reactions found for {rxn_id}: {[x['exp_reaction'] for x in exp_mapping[rxn_id]]}")
+                print(f"Multiple experimental reactions found for {rxn_id}: {[x['exp_reaction'] for x in exp_mapping[rxn_id]]}, used {closest_match['exp_reaction']}")
         else:
             exp_reactions.append(None)
             exp_fluxes.append(None)
@@ -307,6 +314,36 @@ def create_fluxomics_dataframe(exp_fluxes: str, modified_gem: cobra.Model):
     fluxomics_df = fluxomics_df.reset_index()
     
     # Reorder columns
-    fluxomics_df = fluxomics_df[['rxn_id', 'exp_reaction', 'exp_flux', 'FBA_flux', 'pFBA_flux']]
+    fluxomics_df = fluxomics_df[['rxn_id', 'exp_reaction', 'exp_flux', method_flux]]
     
-    return fba_df, pFBA_df, fluxomics_df
+    return fluxomics_df
+
+
+def correct_reversible_reactions(fluxomics_df: pd.DataFrame,
+                                 method: str) -> pd.DataFrame:
+    """
+    Correct reversible reactions in the fluxomics dataframe.
+    
+    Parameters:
+        fluxomics_df: pd.DataFrame
+            DataFrame with experimental, FBA and pFBA fluxomics results
+        method: str
+            Method for the flux simulations: 'FBA_flux' or 'pFBA_flux'
+    
+    Returns:
+        pd.DataFrame: DataFrame with corrected experimental flux sign
+    """
+    
+    # Create a copy of the dataframe to avoid modifying the original
+    corrected_df = fluxomics_df.copy()
+    
+    # Identify reversible reactions
+    reversible_reactions = fluxomics_df[fluxomics_df[method] < 0]
+    
+    # Correct fluxes for reversible reactions
+    for rxn_id, flux in reversible_reactions.iterrows():
+        if flux[method] < 0 and corrected_df.at[rxn_id, 'exp_flux'] > 0:
+            corrected_df.at[rxn_id, 'exp_flux'] = -corrected_df.at[rxn_id, 'exp_flux']
+    
+    return corrected_df
+    

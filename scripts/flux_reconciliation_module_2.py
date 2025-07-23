@@ -118,7 +118,7 @@ def process_measured_fluxes_df(measured_fluxes_df: pd.DataFrame, reaction_names:
     print(f"Matched measurements: {len(measurements)}")
     print(f"Missing reactions: {len(missing_reactions)}")
     if missing_reactions:
-        print("First few missing reactions:", missing_reactions[:5])
+        print("Missing reactions:", missing_reactions)
     print("\nSample of measurements:")
     for rxn_id in list(measurements.keys())[:5]:
         print(f"{rxn_id}: flux = {measurements[rxn_id]}")
@@ -200,8 +200,8 @@ def build_flux_reconciliation_model(S: np.ndarray,
                                   metabolite_names: List[str],
                                   reaction_names: List[str],
                                   measurements: Dict,
-                                  fixed_fluxes: Dict,
-                                  flux_bounds: Dict) -> pyo.ConcreteModel:
+                                  flux_bounds: Dict,
+                                  barrier_param: float = 1e-6) -> pyo.ConcreteModel:
     """
     Build the Pyomo optimization model for flux reconciliation.
     
@@ -219,6 +219,8 @@ def build_flux_reconciliation_model(S: np.ndarray,
         Dictionary of fixed fluxes
     flux_bounds : Dict
         Dictionary of flux bounds
+    barrier_param : float
+        Barrier parameter for complementarity constraints
         
     Returns:
     --------
@@ -227,6 +229,11 @@ def build_flux_reconciliation_model(S: np.ndarray,
     """
     n_metabolites = len(metabolite_names)
     n_reactions = len(reaction_names)
+    
+    # Find biomass reaction index
+    if obj_rxn not in reaction_names:
+        raise ValueError(f"Objective reaction {obj_rxn} not found in model")
+    biomass_idx = reaction_names.index(obj_rxn)
     
     # Set flux bounds
     bounds = {}
@@ -239,98 +246,73 @@ def build_flux_reconciliation_model(S: np.ndarray,
         else:
             bounds[i] = (default_lower, default_upper)
     
-    # Debug prints for bounds
-    print("\n=== Optimization Model Setup ===")
-    print("Sample of bounds:")
-    for i in range(min(5, len(reaction_names))):
-        print(f"{reaction_names[i]}: {bounds[i]}")
-    
     # Initialize Pyomo model
     model = pyo.ConcreteModel()
             
     # Sets
     model.metabolites = pyo.Set(initialize=range(n_metabolites))
     model.reactions = pyo.Set(initialize=range(n_reactions))
-    
-    # Split measured reactions into zero and non-zero measurements
-    zero_measurements = [
-        j for j, name in enumerate(reaction_names)
-        if name in measurements and abs(measurements[name]) < 1e-10
-    ]
-    nonzero_measurements = [
-        j for j, name in enumerate(reaction_names)
-        if name in measurements and abs(measurements[name]) >= 1e-10
-    ]
-    
-    model.zero_measured_reactions = pyo.Set(initialize=zero_measurements)
-    model.nonzero_measured_reactions = pyo.Set(initialize=nonzero_measurements)
-    
-    print("\n=== Measurement Information ===")
-    print(f"Number of zero measurements: {len(zero_measurements)}")
-    print(f"Number of non-zero measurements: {len(nonzero_measurements)}")
+    model.measured_reactions = pyo.Set(initialize=[
+        i for i, name in enumerate(reaction_names) if name in measurements
+    ])
 
     # Variables
+    # Flux variables (decision variables from outer problem)
     model.v = pyo.Var(model.reactions, bounds=(-1000, 1000))
-
+    
+    # Dual variables (inner problem) 
+    model.lambda_mass = pyo.Var(model.metabolites, bounds=(-1000, 1000))  # Mass balance duals
+    model.alpha_L = pyo.Var(model.reactions, bounds=(0, 1000))  # Lower bound duals
+    model.alpha_U = pyo.Var(model.reactions, bounds=(0, 1000))  # Upper bound duals
+    
     # Apply flux bounds to reaction variables
     for i in model.reactions:
         model.v[i].setlb(bounds[i][0])
         model.v[i].setub(bounds[i][1])
-        
-        
-    # Fixed fluxes (discarded)
-    # if fixed_fluxes:
-    #     print("\n=== Fixed Fluxes in Model ===")
-    #     for reaction_name, flux_value in fixed_fluxes.items():
-    #         if reaction_name in reaction_names:
-    #             reaction_idx = reaction_names.index(reaction_name)
-    #             model.v[reaction_idx].fix(flux_value)
-    #             print(f"Fixed {reaction_name} to {flux_value}")
-        
-    # Fixed fluxes as bounds
-    if fixed_fluxes:
-        print("\n=== Setting Flux Bounds in Model ===")
-    for reaction_name, flux_value in fixed_fluxes.items():
-        if reaction_name in reaction_names:
-            reaction_idx = reaction_names.index(reaction_name)
-            v = model.v[reaction_idx]
-            if flux_value < 0:
-                v.setlb(flux_value)  # uptake
-                print(f"Set lower bound of {reaction_name} to {flux_value}")
-            else:
-                v.setub(flux_value)  # secretion
-                print(f"Set upper bound of {reaction_name} to {flux_value}")
-                
-    # Debug prints for model structure
-    print("\n=== Model Structure ===")
-    print(f"Number of variables: {len(model.v)}")
-    print(f"Number of fixed fluxes: {len(fixed_fluxes)}")
-                
-    # Objective function: combining relative error for non-zero measurements
-    # and absolute error for zero measurements
+    
+    # Objective function: minimize weighted sum of squared deviations
     def objective_rule(m):
-        # For non-zero measurements, use relative error
-        relative_error = sum(
-            ((m.v[j] - measurements[reaction_names[j]])/measurements[reaction_names[j]])**2  
-            for j in m.nonzero_measured_reactions
+        return sum(
+            ((m.v[i] - measurements[reaction_names[i]]) / measurements[reaction_names[i]])**2  
+            for i in m.measured_reactions
         )
-        
-        # For zero measurements, use absolute error
-        absolute_error = sum(
-            (m.v[j])**2  # Since measurement is zero
-            for j in m.zero_measured_reactions
-        )
-
-        return relative_error + absolute_error
     model.obj = pyo.Objective(rule=objective_rule, sense=pyo.minimize)
-
-    # Mass balance constraints (S matrix)
+    
+    # Constraints from inner problem optimality conditions
+    
+    # 1. Mass balance constraints (primal feasibility)
     def mass_balance_rule(m, i):
         return sum(S[i, j] * m.v[j] for j in m.reactions) == 0
     model.mass_balance = pyo.Constraint(model.metabolites, rule=mass_balance_rule)
+    
+    # 2. Dual feasibility (stationarity condition)
+    # For biomass reaction: 1 + S^T * lambda + alpha_L - alpha_U = 0
+    def dual_biomass_rule(m):
+        return (1 + sum(S[i, biomass_idx] * m.lambda_mass[i] for i in m.metabolites) + 
+                m.alpha_L[biomass_idx] - m.alpha_U[biomass_idx] == 0)
+    model.dual_biomass = pyo.Constraint(rule=dual_biomass_rule)
+    
+    # For all other reactions: S^T * lambda + alpha_L - alpha_U = 0
+    def dual_other_rule(m, j):
+        if j == biomass_idx:
+            return pyo.Constraint.Skip
+        return (sum(S[i, j] * m.lambda_mass[i] for i in m.metabolites) + 
+                m.alpha_L[j] - m.alpha_U[j] == 0)
+    model.dual_other = pyo.Constraint(model.reactions, rule=dual_other_rule)
+    
+    # 3. Complementarity constraints (relaxed with barrier parameter)
+    def comp_lower_rule(m, j):
+        return (m.v[j] - bounds[j][0]) * m.alpha_L[j] <= barrier_param
+    model.comp_lower = pyo.Constraint(model.reactions, rule=comp_lower_rule)
+    
+    def comp_upper_rule(m, j):
+        return (bounds[j][1] - m.v[j]) * m.alpha_U[j] <= barrier_param
+    model.comp_upper = pyo.Constraint(model.reactions, rule=comp_upper_rule)
+        
     print(f"Number of mass balance constraints: {len(model.mass_balance)}")
-    
-    
+    print(f"Number of dual feasibility constraints: {len(model.dual_other) + 1}")
+    print(f"Number of complementarity constraints: {len(model.comp_lower) + len(model.comp_upper)}")
+    print(f"Barrier parameter: {barrier_param}")
     
     return model
 
@@ -338,7 +320,7 @@ def build_flux_reconciliation_model(S: np.ndarray,
 def solve_flux_reconciliation_model(model: pyo.ConcreteModel,
                                   reaction_names: List[str],
                                   measurements: Dict,
-                                  solver_name: str = 'ipopt',
+                                  solver_name: Optional[str] = 'ipopt',
                                   solver_options: Optional[Dict] = None) -> Dict:
     """
     Solve the flux reconciliation optimization model.
@@ -365,8 +347,8 @@ def solve_flux_reconciliation_model(model: pyo.ConcreteModel,
         solver_options = {
             'max_iter': 3000,
             'tol': 1e-8,
-            'acceptable_tol': 1e-6
-        }
+            'acceptable_tol': 1e-6        
+            }
 
     solver = pyo.SolverFactory(solver_name)
 
@@ -384,9 +366,25 @@ def solve_flux_reconciliation_model(model: pyo.ConcreteModel,
         if (results.solver.termination_condition == TerminationCondition.optimal or
             results.solver.termination_condition == TerminationCondition.locallyOptimal):
             
-            # Extract results
+             # Extract results
             reconciled_fluxes = {
                 reaction_names[j]: pyo.value(model.v[j])
+                for j in model.reactions
+            }
+            
+            # Extract dual variables for analysis
+            dual_mass_balance = {
+                j: pyo.value(model.lambda_mass[j])
+                for j in model.metabolites
+            }
+            
+            dual_lower = {
+                reaction_names[j]: pyo.value(model.alpha_L[j])
+                for j in model.reactions
+            }
+            
+            dual_upper = {
+                reaction_names[j]: pyo.value(model.alpha_U[j])
                 for j in model.reactions
             }
             
@@ -394,6 +392,9 @@ def solve_flux_reconciliation_model(model: pyo.ConcreteModel,
             
             results_dict = {
                 'reconciled_reaction_fluxes': reconciled_fluxes,
+                'dual_mass_balance': dual_mass_balance,
+                'dual_lower_bounds': dual_lower,
+                'dual_upper_bounds': dual_upper,
                 'objective_value': objective_value,
                 'solver_status': 'optimal',
                 'original_measurements': measurements
@@ -417,10 +418,10 @@ def solve_flux_reconciliation_model(model: pyo.ConcreteModel,
 
 def flux_reconciliation(model_path: str,
                        measured_fluxes_df: pd.DataFrame,
-                       fixed_fluxes_df: pd.DataFrame,
                        obj_rxn: str,
                        solver_name: Optional[str] = 'ipopt',
-                       solver_options: Optional[Dict] = None) -> pd.DataFrame:
+                       solver_options: Optional[Dict] = None,
+                       barrier_param: Optional[float] = 1e-6) -> pd.DataFrame:
     """
     Main function to perform flux reconciliation.
     
@@ -466,7 +467,6 @@ def flux_reconciliation(model_path: str,
     
     # Process input dataframes
     measurements = process_measured_fluxes_df(measured_fluxes_df, reaction_names)
-    fixed_fluxes = process_fixed_fluxes_df(fixed_fluxes_df, reaction_names, measurements)
     
     # Validate measurements against bounds
     print("\n=== Validating Measurements Against Bounds ===")
@@ -485,7 +485,7 @@ def flux_reconciliation(model_path: str,
     # Build optimization model
     optimization_model = build_flux_reconciliation_model(
         S, obj_rxn, metabolite_names, reaction_names, measurements,
-        fixed_fluxes, flux_bounds
+        flux_bounds, barrier_param
     )
     
     # Solve model
@@ -502,12 +502,239 @@ def flux_reconciliation(model_path: str,
             row_data = {
                 'rxn_id': rxn_id,
                 'reconciled_flux': results['reconciled_reaction_fluxes'][rxn_id],
-                'original_measured_flux': measurements.get(rxn_id, None)
+                'original_measured_flux': measurements.get(rxn_id, None),
+                'dual_lower_bound': results['dual_lower_bounds'][rxn_id],
+                'dual_upper_bound': results['dual_upper_bounds'][rxn_id]
             }
             results_data.append(row_data)
         
         results_df = pd.DataFrame(results_data)
+        
         return results_df
     
+    else:
+        raise RuntimeError(f"Optimization failed: {results.get('error_message', 'Unknown error')}")
+
+
+
+def build_simple_flux_reconciliation(S: np.ndarray, 
+                                   metabolite_names: List[str],
+                                   reaction_names: List[str],
+                                   measurements: Dict,
+                                   flux_bounds: Dict,
+                                   biomass_reaction: str,
+                                   measurement_weights: Optional[Dict] = None,
+                                   biomass_weight: float = 1.0) -> pyo.ConcreteModel:
+    """
+    Build a simplified single-level flux reconciliation model.
+    
+    This formulation minimizes:
+    1. Weighted deviations from measured fluxes
+    2. Negative biomass production (to encourage growth)
+    
+    Subject to:
+    - Mass balance constraints
+    - Flux bounds
+    """
+    
+    n_metabolites = len(metabolite_names)
+    n_reactions = len(reaction_names)
+    
+    # Find biomass reaction index
+    if biomass_reaction not in reaction_names:
+        raise ValueError(f"Biomass reaction {biomass_reaction} not found in model")
+    biomass_idx = reaction_names.index(biomass_reaction)
+    
+    # Default weights
+    if measurement_weights is None:
+        measurement_weights = {rxn_id: 1.0 for rxn_id in measurements.keys()}
+    
+    # Initialize model
+    model = pyo.ConcreteModel()
+    
+    # Sets
+    model.metabolites = pyo.Set(initialize=range(n_metabolites))
+    model.reactions = pyo.Set(initialize=range(n_reactions))
+    model.measured_reactions = pyo.Set(initialize=[
+        i for i, name in enumerate(reaction_names) if name in measurements
+    ])
+    
+    # Variables
+    model.v = pyo.Var(model.reactions, bounds=(-1000, 1000))  # Flux variables
+    model.dev_pos = pyo.Var(model.measured_reactions, bounds=(0, None))  # Positive deviations
+    model.dev_neg = pyo.Var(model.measured_reactions, bounds=(0, None))  # Negative deviations
+    
+    # Apply flux bounds
+    for i in model.reactions:
+        rxn_name = reaction_names[i]
+        if rxn_name in flux_bounds:
+            lb, ub = flux_bounds[rxn_name]
+            model.v[i].setlb(lb)
+            model.v[i].setub(ub)
+    
+    # Objective: minimize weighted deviations + encourage biomass
+    def objective_rule(m):
+        deviation_term = sum(
+            measurement_weights.get(reaction_names[i], 1.0) * (m.dev_pos[i] + m.dev_neg[i])
+            for i in m.measured_reactions
+        )
+        # Encourage biomass production (negative coefficient)
+        biomass_term = -biomass_weight * m.v[biomass_idx]
+        
+        return deviation_term + biomass_term
+    
+    model.obj = pyo.Objective(rule=objective_rule, sense=pyo.minimize)
+    
+    # Mass balance constraints
+    def mass_balance_rule(m, i):
+        return sum(S[i, j] * m.v[j] for j in m.reactions) == 0
+    
+    model.mass_balance = pyo.Constraint(model.metabolites, rule=mass_balance_rule)
+    
+    # Deviation constraints
+    def deviation_rule(m, i):
+        rxn_name = reaction_names[i]
+        measured_value = measurements[rxn_name]
+        return m.v[i] - measured_value == m.dev_pos[i] - m.dev_neg[i]
+    
+    model.deviation_constraint = pyo.Constraint(model.measured_reactions, rule=deviation_rule)
+    
+    # Minimum biomass constraint 
+    model.min_biomass = pyo.Constraint(expr=model.v[biomass_idx] >= 0.01)
+    
+    print(f"Model built with {len(model.mass_balance)} mass balance constraints")
+    print(f"Number of measured reactions: {len(model.measured_reactions)}")
+    print(f"Biomass reaction: {biomass_reaction} (index {biomass_idx})")
+    
+    return model
+
+
+def solve_simple_flux_reconciliation(model: pyo.ConcreteModel,
+                                   reaction_names: List[str],
+                                   measurements: Dict,
+                                   solver_name: str = 'ipopt') -> Dict:
+    """
+    Solve the simplified flux reconciliation model.
+    """
+    
+    solver = pyo.SolverFactory(solver_name)
+    
+    # Solver options for better numerical stability
+    solver.options['tol'] = 1e-6
+    solver.options['max_iter'] = 3000
+    solver.options['print_level'] = 5
+    solver.options['hessian_approximation'] = 'limited-memory'
+    
+    try:
+        print("\n=== Solving Simplified Model ===")
+        results = solver.solve(model, tee=True)
+        
+        print(f"Solver Status: {results.solver.status}")
+        print(f"Termination Condition: {results.solver.termination_condition}")
+        
+        if (results.solver.termination_condition == TerminationCondition.optimal or
+            results.solver.termination_condition == TerminationCondition.locallyOptimal):
+            
+            # Extract results
+            reconciled_fluxes = {
+                reaction_names[j]: pyo.value(model.v[j])
+                for j in model.reactions
+            }
+            
+            # Calculate deviations
+            deviations = {}
+            for i in model.measured_reactions:
+                rxn_name = reaction_names[i]
+                measured = measurements[rxn_name]
+                reconciled = reconciled_fluxes[rxn_name]
+                deviations[rxn_name] = reconciled - measured
+            
+            objective_value = pyo.value(model.obj)
+            
+            results_dict = {
+                'reconciled_fluxes': reconciled_fluxes,
+                'deviations': deviations,
+                'objective_value': objective_value,
+                'solver_status': 'optimal',
+                'measurements': measurements
+            }
+            
+            print(f"\nObjective value: {objective_value:.6f}")
+            print("\nMeasurement vs Reconciled:")
+            for rxn_name in measurements.keys():
+                measured = measurements[rxn_name]
+                reconciled = reconciled_fluxes[rxn_name]
+                deviation = deviations[rxn_name]
+                print(f"  {rxn_name}: measured={measured:.3f}, reconciled={reconciled:.3f}, dev={deviation:.3f}")
+            
+            return results_dict
+            
+        else:
+            print(f"Optimization failed: {results.solver.termination_condition}")
+            return {'solver_status': 'failed', 'termination_condition': str(results.solver.termination_condition)}
+            
+    except Exception as e:
+        print(f"Error during optimization: {e}")
+        return {'solver_status': 'error', 'error_message': str(e)}
+
+
+def simple_flux_reconciliation_main(model_path: str,
+                                  measured_fluxes_df: pd.DataFrame,
+                                  biomass_reaction: str = 'BIOMASS_Ec_iML1515_core_75p37M',
+                                  solver_name: str = 'ipopt') -> pd.DataFrame:
+    """
+    Main function for simplified flux reconciliation.
+    """
+    
+    # Load model (reuse your existing function)
+    model = read_sbml_model(model_path)
+    
+    # Extract model information (reuse your existing function)
+    # You can copy the extract_model_info function from your original code
+    reaction_names = [rxn.id for rxn in model.reactions]
+    metabolite_names = [met.id for met in model.metabolites]
+    
+    n_reactions = len(reaction_names)
+    n_metabolites = len(metabolite_names)
+    
+    # Create stoichiometric matrix
+    S = np.zeros((n_metabolites, n_reactions))
+    for j, reaction in enumerate(model.reactions):
+        for metabolite, coefficient in reaction.metabolites.items():
+            i = metabolite_names.index(metabolite.id)
+            S[i, j] = coefficient
+    
+    # Extract flux bounds
+    flux_bounds = {}
+    for reaction in model.reactions:
+        flux_bounds[reaction.id] = (reaction.lower_bound, reaction.upper_bound)
+    
+    # Process measurements
+    measurements = {}
+    for _, row in measured_fluxes_df.iterrows():
+        rxn_id = row['rxn_id']
+        if rxn_id in reaction_names:
+            measurements[rxn_id] = row.iloc[1]
+    
+    # Build and solve model
+    opt_model = build_simple_flux_reconciliation(
+        S, metabolite_names, reaction_names, measurements,
+        flux_bounds, biomass_reaction
+    )
+    
+    results = solve_simple_flux_reconciliation(opt_model, reaction_names, measurements, solver_name)
+    
+    # Create results DataFrame
+    if results['solver_status'] == 'optimal':
+        results_data = []
+        for rxn_id in reaction_names:
+            results_data.append({
+                'rxn_id': rxn_id,
+                'reconciled_flux': results['reconciled_fluxes'][rxn_id],
+                'measured_flux': measurements.get(rxn_id, None),
+                'deviation': results['deviations'].get(rxn_id, None)
+            })
+        
+        return pd.DataFrame(results_data)
     else:
         raise RuntimeError(f"Optimization failed: {results.get('error_message', 'Unknown error')}")
