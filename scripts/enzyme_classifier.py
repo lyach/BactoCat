@@ -20,6 +20,23 @@ import cobra
 import re
 
 
+def classify_gpr_type(gpr_rule):
+    """
+    Classify the GPR rule as 'simple', 'or_only', 'and_only', or 'complex'.
+    """
+    gpr = str(gpr_rule).lower()
+    has_and = 'and' in gpr
+    has_or = 'or' in gpr
+    if not has_and and not has_or:
+        return 'simple'
+    elif has_or and not has_and:
+        return 'or_only'
+    elif has_and and not has_or:
+        return 'and_only'
+    else:
+        return 'complex'
+
+
 def create_gpr_dataframe(model):
     """
     Create a dataframe that represents gene-protein-reaction rules from a COBRA model
@@ -29,7 +46,7 @@ def create_gpr_dataframe(model):
     
     Returns:
         pd.DataFrame: DataFrame with columns 
-        ['gene', 'type', 'rxn', 'subunit', 'GPR', 'enzyme_ID']
+        ['gene', 'type', 'rxn', 'subunit', 'GPR', 'enzyme_ID', 'gpr_class']
     """
     
     rows = []
@@ -41,27 +58,30 @@ def create_gpr_dataframe(model):
         # Skip reactions without GPR rules
         if not gpr_rule or gpr_rule.strip() == '' or gpr_rule == 'None':
             continue
-            
+        
         # Get genes involved in this reaction
         genes_in_rule = [gene.id for gene in reaction.genes]
         
         if not genes_in_rule:
             continue
-            
+        
+        # Classify GPR type for this reaction
+        gpr_class = classify_gpr_type(gpr_rule)
+        
         # Process each gene in the GPR rule
         for gene in genes_in_rule:
             # Determine enzyme type based on GPR complexity
             enzyme_type, subunits, enzyme_id = determine_enzyme_properties(
                 gene, gpr_rule, reaction.id, genes_in_rule
             )
-            
             row = {
                 'gene': gene,
                 'type': enzyme_type,
                 'rxn': reaction.id,
                 'subunit': subunits if subunits else '-',
                 'GPR': gpr_rule,
-                'enzyme_ID': enzyme_id
+                'enzyme_ID': enzyme_id,
+                'gpr_class': gpr_class,
             }
             rows.append(row)
     
