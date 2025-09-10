@@ -15,6 +15,10 @@ import warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
+# ============================================
+# Plots for comparing kcat distributions
+# ============================================
+
 def compare_kcat_distribution(df1: pd.DataFrame, kcat_col1: str, 
                             df2: pd.DataFrame, kcat_col2: str,
                             label1: str = "Dataset 1", 
@@ -69,16 +73,16 @@ def compare_kcat_distribution(df1: pd.DataFrame, kcat_col1: str,
     _print_summary_statistics(kcat1_raw, log_kcat1, kcat2_raw, log_kcat2, label1, label2)
     
     # Create visualization
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    fig, axes = plt.subplots(1, 2, figsize=figsize)
     
     # Plot 1: Log-histogram + KDE overlay
     _plot_histogram_kde(log_kcat1, log_kcat2, axes[0], label1, label2)
     
     # Plot 2: ECDF overlay
-    _plot_ecdf(log_kcat1, log_kcat2, axes[1], label1, label2)
+    #_plot_ecdf(log_kcat1, log_kcat2, axes[1], label1, label2)
     
     # Plot 3: Q-Q plot
-    _plot_qq(log_kcat1, log_kcat2, axes[2], label1, label2)
+    _plot_qq(log_kcat1, log_kcat2, axes[1], label1, label2)
     
     plt.tight_layout()
     plt.show()
@@ -194,8 +198,8 @@ def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series, ax: plt.Axes
     except Exception as e:
         print(f"Warning: Could not generate KDE overlay: {e}")
     
-    ax.set_xlabel('log₁₀(kcat) [s⁻¹]')
-    ax.set_ylabel('Density')
+    ax.set_xlabel('log₁₀(kcat) [s⁻¹]', fontweight="bold")
+    ax.set_ylabel('Density', fontweight="bold")
     ax.set_title('Distribution Comparison\n(Histogram + KDE)')
     ax.legend()
     ax.grid(True, alpha=0.3)
@@ -219,47 +223,99 @@ def _plot_ecdf(log_kcat1: pd.Series, log_kcat2: pd.Series, ax: plt.Axes,
     ax.plot(x2, y2, label=f'{label2} (n={len(log_kcat2):,})', 
             linewidth=2, color='red')
     
-    ax.set_xlabel('log₁₀(kcat) [s⁻¹]')
-    ax.set_ylabel('Cumulative Probability')
+    ax.set_xlabel('log₁₀(kcat) [s⁻¹]', fontweight="bold")
+    ax.set_ylabel('Cumulative Probability', fontweight="bold")
     ax.set_title('Empirical Cumulative\nDistribution Functions')
     ax.legend()
     ax.grid(True, alpha=0.3)
     ax.set_ylim(0, 1)
 
 
-def _plot_qq(log_kcat1: pd.Series, log_kcat2: pd.Series, ax: plt.Axes,
-             label1: str, label2: str) -> None:
-    """Plot quantile-quantile plot."""
-    
-    # Clean data
-    data1 = log_kcat1.dropna()
-    data2 = log_kcat2.dropna()
-    
-    # Calculate quantiles for Q-Q plot
-    n_quantiles = min(len(data1), len(data2), 1000)  # Limit for performance
-    quantiles = np.linspace(0, 1, n_quantiles)
-    
-    q1 = np.quantile(data1, quantiles)
-    q2 = np.quantile(data2, quantiles)
-    
-    # Plot Q-Q
-    ax.scatter(q1, q2, alpha=0.6, s=20, color='purple')
-    
-    # Add diagonal reference line
-    min_val = min(q1.min(), q2.min())
-    max_val = max(q1.max(), q2.max())
-    ax.plot([min_val, max_val], [min_val, max_val], 
-            'r--', linewidth=2, label='y = x')
-    
-    ax.set_xlabel(f'log₁₀(kcat) Quantiles - {label1}')
-    ax.set_ylabel(f'log₁₀(kcat) Quantiles - {label2}')
-    ax.set_title('Quantile-Quantile Plot\n(log₁₀ scale)')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    # Add correlation coefficient
-    correlation = np.corrcoef(q1, q2)[0, 1]
-    ax.text(0.05, 0.95, f'r = {correlation:.3f}', 
-            transform=ax.transAxes, fontsize=10,
-            bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
 
+def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
+             label_x: str, label_y: str,
+             qmin: float = 0.02, qmax: float = 0.98, n_q: int = 49,
+             random_state: int = 0) -> None:
+    """
+    Quantile–Quantile plot on log10(kcat):
+      x-axis: label_x (e.g., kcat_invivo)
+      y-axis: label_y (e.g., kcat_CatPred)
+
+    Shows y=x (no distributional difference) and a robust Theil–Sen fit:
+        q_y(p) ≈ a + b * q_x(p)
+    where:
+      a  ~ location shift on log10 scale (10**a is the multiplicative shift)
+      b  ~ relative dispersion (b≈1 similar spread; b<1 narrower; b>1 wider)
+    """
+
+    # clean & choose quantiles
+    x = np.asarray(log_kcat_x.dropna(), dtype=float)
+    y = np.asarray(log_kcat_y.dropna(), dtype=float)
+    if x.size == 0 or y.size == 0:
+        raise ValueError("Empty input after dropping NaNs.")
+
+    p = np.linspace(qmin, qmax, min(n_q, x.size, y.size))
+    qx = np.quantile(x, p)
+    qy = np.quantile(y, p)
+
+    # scatter of Q–Q points
+    ax.scatter(qx, qy, alpha=0.65, s=22, label="Quantile pairs", color="purple")
+
+    # y = x reference line
+    lo = float(min(qx.min(), qy.min()))
+    hi = float(max(qx.max(), qy.max()))
+    ax.plot([lo, hi], [lo, hi], "r--", lw=2, label="y = x")
+
+    # ordinary least squares fit
+    a = b = np.nan
+    b, a = np.polyfit(qx, qy, deg=1)
+
+    # plot the fitted line across the Q–Q domain
+    xs = np.array([lo, hi])
+    ax.plot(xs, a + b * xs, lw=2.0, color="black",
+            label=("y = a + b x"))
+
+    # annotate interpretable stats
+    shift = 10 ** a  # multiplicative location shift on original scale
+    mad_resid = np.median(np.abs(qy - (a + b * qx)))  # robust residual scale on log10
+    ax.text(0.03, 0.97,
+            f"a = {a:.2f}\n"
+            f"b = {b:.2f}\n"
+            f"MAD = {mad_resid:.2f}",
+            transform=ax.transAxes, ha="left", va="top",
+            fontsize=10, bbox=dict(boxstyle="round", facecolor="white", alpha=0.85))
+
+    # axes/labels 
+    ax.set_xlabel(f"log₁₀(kcat) quantiles — in vivo", fontweight="bold")
+    ax.set_ylabel(f"log₁₀(kcat) quantiles — in vitro", fontweight="bold")
+    ax.set_title("Quantile–Quantile Plot (log₁₀ scale)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(frameon=True)
+    
+
+
+
+# ============================================
+# Functions to load specific kcat datasets
+# ============================================
+
+def load_kcat_dataset(CPIPred_dir, CatPred_dir) -> pd.DataFrame:
+    CPIPred_df = pd.read_csv(CPIPred_dir)
+    CatPred_df = pd.read_csv(CatPred_dir)
+    
+    # Keep only E coli data
+    CPIPred_df = CPIPred_df[CPIPred_df['organism'].str.contains("Escherichia coli", case=False, na=False)]
+    CatPred_df = CatPred_df[(CatPred_df['taxonomy_id'] == 562) | (CatPred_df['taxonomy_id'] == 83333)]
+    
+    # Clean for easy merge
+    CPIPred_df = CPIPred_df[["SEQ", "CMPD_SMILES", "kcat"]]
+    CPIPred_df = CPIPred_df[CPIPred_df['kcat'].notna()]
+    CPIPred_df.rename(columns={"SEQ": "sequence", "CMPD_SMILES": "SMILES", "kcat": "kcat_CPIPred"}, inplace=True)
+
+    CatPred_df = CatPred_df[["sequence", "reactant_smiles", "value"]]
+    CatPred_df = CatPred_df[CatPred_df['value'].notna()]
+    CatPred_df.rename(columns={'reactant_smiles': 'SMILES', "value": "kcat_CatPred"}, inplace=True)
+
+    #df_kcat = pd.concat([CPIPred_df, CatPred_df])
+        
+    return CPIPred_df, CatPred_df

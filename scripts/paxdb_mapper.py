@@ -104,6 +104,7 @@ def map_paxdb_to_gene(paxdb_df: pd.DataFrame, df_enzymes: pd.DataFrame, p_total:
     
     # Calculate protein_mol_gdcw: protein_ppm * p_total / molecular_weight
     # where p_total is the total protein content in g/gDCW
+    # molecular_weight is in g/mol
     enz_mapped["protein_mol_gdcw"] = (
         enz_mapped["protein_fraction"] * p_total / enz_mapped["molecular_weight"]
     )

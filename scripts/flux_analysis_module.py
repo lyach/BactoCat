@@ -138,6 +138,87 @@ class FluxAnalyzer:
             
         return results
     
+    def plot_correlation_enhanced(self, figsize=(8, 6), sizes=(20, 200), palette='coolwarm', alpha=0.7, 
+                                 xlabel=None, ylabel=None):
+        """
+        Create an enhanced correlation plot with dots colored and scaled by absolute difference
+        
+        Parameters:
+        -----------
+        figsize : tuple
+            Figure size for the plot
+        sizes : tuple
+            Min and max sizes for the scatter points
+        palette : str
+            Color palette for the hue mapping
+        alpha : float
+            Transparency of the scatter points
+        xlabel : str, optional
+            Custom label for x-axis. If None, uses column name
+        ylabel : str, optional
+            Custom label for y-axis. If None, uses column name
+            
+        Returns:
+        --------
+        dict : Dictionary containing correlation statistics
+        """
+        if len(self.clean_df) == 0:
+            print("No valid data points for correlation analysis")
+            return {}
+        
+        # Calculate correlation statistics
+        pearson_r, pearson_p = pearsonr(self.clean_df[self.method1_col], self.clean_df[self.method2_col])
+        r2 = pearson_r ** 2
+        
+        # Linear regression
+        slope, intercept, _, _, _ = stats.linregress(self.clean_df[self.method1_col], self.clean_df[self.method2_col])
+        
+        # Create the plot
+        plt.figure(figsize=figsize)
+        
+        # Create enhanced scatter plot with size and color based on absolute difference
+        sns.scatterplot(data=self.clean_df, x=self.method1_col, y=self.method2_col,
+                       size='abs_difference', hue='abs_difference',
+                       sizes=sizes, palette=palette, alpha=alpha)
+        
+        # Add regression line
+        x_range = np.linspace(self.clean_df[self.method1_col].min(), 
+                             self.clean_df[self.method1_col].max(), 100)
+        y_pred = slope * x_range + intercept
+        plt.plot(x_range, y_pred, 'r--', linewidth=2, label=f'y = {slope:.3f}x + {intercept:.3f}')
+        
+        # Fix the legend title
+        legend = plt.legend(title='Abs difference', loc='upper left', 
+                           bbox_to_anchor=(0.02, 0.98),
+                           title_fontsize=11, fontsize=10,
+                           framealpha=0.9, fancybox=True)
+        
+        # Add perfect correlation line
+        min_val = min(self.clean_df[self.method1_col].min(), self.clean_df[self.method2_col].min())
+        max_val = max(self.clean_df[self.method1_col].max(), self.clean_df[self.method2_col].max())
+        plt.plot([min_val, max_val], [min_val, max_val], 'k--', alpha=0.7, label='Perfect correlation')
+        
+        # Set labels and title
+        plt.xlabel(xlabel if xlabel is not None else f'{self.method1_col}')
+        plt.ylabel(ylabel if ylabel is not None else f'{self.method2_col}')
+        plt.title(f'Enhanced Correlation Plot\nR² = {r2:.3f}, r = {pearson_r:.3f}')
+        plt.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
+        
+        # Return correlation statistics
+        results = {
+            'pearson_r': pearson_r,
+            'pearson_p': pearson_p,
+            'r_squared': r2,
+            'slope': slope,
+            'intercept': intercept,
+            'n_points': len(self.clean_df)
+        }
+        
+        return results
+    
     def identify_outliers(self, top_n=10, method='absolute'):
         """
         Identify reactions with biggest and smallest differences
