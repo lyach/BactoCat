@@ -78,6 +78,7 @@ def create_gpr_dataframe(model):
                 'gene': gene,
                 'type': enzyme_type,
                 'rxn': reaction.id,
+                'subsystem': reaction.subsystem,
                 'subunit': subunits if subunits else '-',
                 'GPR': gpr_rule,
                 'enzyme_ID': enzyme_id,

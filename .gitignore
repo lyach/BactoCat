@@ -47,3 +47,6 @@ Thumbs.db
 
 # Folders
 QE
+
+# Cache files
+cache/

@@ -8,10 +8,10 @@ Utility functions for kcat visualization.
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 from scipy import stats
-from typing import Tuple, Dict, Any
+from typing import Tuple, Dict
 import warnings
+from rdkit import Chem
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
@@ -137,7 +137,7 @@ def _print_summary_statistics(kcat1_raw: pd.Series, log_kcat1: pd.Series,
     geom_stats2 = _calculate_geometric_stats(kcat2_raw.values)
     
     # Print original scale statistics
-    print(f"\nORIGINAL SCALE STATISTICS (s⁻¹)")
+    print("\nORIGINAL SCALE STATISTICS (s⁻¹)")
     print("-" * 50)
     print(f"{'Statistic':<20} {label1:<15} {label2:<15}")
     print("-" * 50)
@@ -154,7 +154,7 @@ def _print_summary_statistics(kcat1_raw: pd.Series, log_kcat1: pd.Series,
     print(f"{'Geometric Std':<20} {geom_stats1['geometric_std']:<15.2e} {geom_stats2['geometric_std']:<15.2e}")
     
     # Print log10 scale statistics
-    print(f"\nLOG₁₀ SCALE STATISTICS")
+    print("\nLOG₁₀ SCALE STATISTICS")
     print("-" * 50)
     print(f"{'Statistic':<20} {label1:<15} {label2:<15}")
     print("-" * 50)
@@ -276,7 +276,6 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
             label=("y = a + b x"))
 
     # annotate interpretable stats
-    shift = 10 ** a  # multiplicative location shift on original scale
     mad_resid = np.median(np.abs(qy - (a + b * qx)))  # robust residual scale on log10
     ax.text(0.03, 0.97,
             f"a = {a:.2f}\n"
@@ -286,8 +285,8 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
             fontsize=10, bbox=dict(boxstyle="round", facecolor="white", alpha=0.85))
 
     # axes/labels 
-    ax.set_xlabel(f"log₁₀(kcat) quantiles — in vivo", fontweight="bold")
-    ax.set_ylabel(f"log₁₀(kcat) quantiles — in vitro", fontweight="bold")
+    ax.set_xlabel("log₁₀(kcat) quantiles — in vivo", fontweight="bold")
+    ax.set_ylabel("log₁₀(kcat) quantiles — in vitro", fontweight="bold")
     ax.set_title("Quantile–Quantile Plot (log₁₀ scale)")
     ax.grid(True, alpha=0.3)
     ax.legend(frameon=True)
@@ -296,7 +295,7 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
 
 
 # ============================================
-# Functions to load specific kcat datasets
+# Functions for specific kcat datasets
 # ============================================
 
 def load_kcat_dataset(CPIPred_dir, CatPred_dir) -> pd.DataFrame:
@@ -319,3 +318,149 @@ def load_kcat_dataset(CPIPred_dir, CatPred_dir) -> pd.DataFrame:
     #df_kcat = pd.concat([CPIPred_df, CatPred_df])
         
     return CPIPred_df, CatPred_df
+
+
+def process_catpred_smiles(df: pd.DataFrame, smiles_col: str = 'reactant_smiles') -> pd.DataFrame:
+    """
+    Process CatPred SMILES entries to extract main substrates, filtering out cofactors.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe containing SMILES entries
+    smiles_col : str
+        Column name containing the SMILES entries to process
+        
+    Returns
+    -------
+    pd.DataFrame
+        New dataframe with additional 'SMILES' column containing individual 
+        substrate SMILES, with one row per substrate. Original rows with multiple 
+        substrates are expanded into multiple rows.
+    """
+    
+    # Define common cofactors to filter out
+    cofactors = {
+        'O',           # water
+        'O=O',         # molecular oxygen  
+        '[H]',         # hydrogen
+        'OO',          # hydrogen peroxide
+        '[O]',         # atomic oxygen
+        '[OH-]',       # hydroxide
+        '[H+]',        # proton
+        'N',           # nitrogen (sometimes used)
+        'P',           # phosphorus
+        'S',           # sulfur
+    }
+    
+    # Create a copy of the dataframe
+    result_df = df.copy()
+    
+    # List to store processed rows
+    processed_rows = []
+    
+    for idx, row in result_df.iterrows():
+        smiles_entry = row[smiles_col]
+        
+        # Split SMILES by '.' to get individual molecules
+        molecules = [mol.strip() for mol in str(smiles_entry).split('.')]
+        
+        # Filter out cofactors and keep only substrates
+        substrates = []
+        for mol in molecules:
+            if mol and mol not in cofactors:
+                # Additional filtering for very simple molecules that are likely cofactors
+                # Skip molecules that are too simple (less than 3 non-hydrogen atoms)
+                if _is_likely_substrate(mol):
+                    substrates.append(mol)
+        
+        # If no substrates found, keep the original entry
+        if not substrates:
+            row_copy = row.copy()
+            row_copy['SMILES'] = smiles_entry
+            processed_rows.append(row_copy)
+        else:
+            # Create a row for each substrate
+            for substrate in substrates:
+                row_copy = row.copy()
+                row_copy['SMILES'] = substrate
+                processed_rows.append(row_copy)
+    
+    # Convert back to DataFrame
+    result_df = pd.DataFrame(processed_rows)
+    
+    # Drop duplicates
+    result_df = result_df.drop_duplicates(subset=["sequence", "SMILES"])
+
+    result_df.reset_index(drop=True, inplace=True)
+    
+    return result_df
+
+
+def _is_likely_substrate(smiles: str) -> bool:
+    """
+    Determine if a SMILES string represents a likely substrate (not a cofactor).
+    
+    This function uses heuristics to distinguish between substrates and cofactors
+    based on molecular complexity and common cofactor patterns.
+    
+    Parameters
+    ----------
+    smiles : str
+        SMILES string representing a molecule
+        
+    Returns
+    -------
+    bool
+        True if the molecule is likely a substrate, False if likely a cofactor
+    """
+    
+    # Additional known cofactors not caught by simple string matching
+    simple_cofactors = {
+        'C(=O)O',      # formic acid
+        'CO',          # methanol
+        'CCO',         # ethanol
+        'CC(=O)O',     # acetic acid
+        'C',           # methane
+        'CC',          # ethane
+        'CCC',         # propane
+        'N',           # ammonia (as N)
+        'NN',          # hydrazine
+        'C=O',         # formaldehyde
+        'CC=O',        # acetaldehyde
+        'O=C=O',       # carbon dioxide
+        '[NH3+]',      # ammonium
+        '[Na+]',       # sodium
+        '[Cl-]',       # chloride
+        '[K+]',        # potassium
+        '[Mg+2]',      # magnesium
+        '[Ca+2]',      # calcium
+    }
+    
+    if smiles in simple_cofactors:
+        return False
+    
+    # Count non-hydrogen atoms (rough complexity measure)
+    # This is a simplified approach - in reality you'd use rdkit for proper atom counting
+    non_h_chars = sum(1 for c in smiles if c.isupper() and c not in ['H'])
+    
+    # If very few heavy atoms, likely a cofactor
+    if non_h_chars < 3:
+        return False
+    
+    # Additional heuristics can be added here
+    # For now, if it passes the above filters, consider it a substrate
+    return True
+
+
+
+# ============================================
+# Others
+# ============================================
+
+def canonicalize(smiles):
+    try:
+        mol = Chem.MolFromSmiles(smiles)
+        return Chem.MolToSmiles(mol, canonical=True)
+    except:
+        return None

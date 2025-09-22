@@ -177,10 +177,40 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
             ((condition_df['Direction'] == 'reverse') & (condition_df['flux_value'] <= 0))
         ]
         
-        # Drop rows with balancing species (unlikely to be substrates) - where SMILES is '[H+]' or 'O'
-        condition_df = condition_df[
-            ~condition_df['SMILES'].isin(['[H+]', 'O'])
-        ]
+        # Drop rows with balancing species / cofactors (unlikely to be substrates)
+        cofactors = {
+            # Common cofactors
+            'O',           # water
+            'O=O',         # molecular oxygen  
+            '[H]',         # hydrogen
+            'OO',          # hydrogen peroxide
+            '[O]',         # atomic oxygen
+            '[OH-]',       # hydroxide
+            '[H+]',        # proton
+            'N',           # nitrogen (sometimes used)
+            'P',           # phosphorus
+            'S',           # sulfur
+            # Simple cofactors
+            'C(=O)O',      # formic acid
+            'CO',          # methanol
+            'CCO',         # ethanol
+            'CC(=O)O',     # acetic acid
+            'C',           # methane
+            'CC',          # ethane
+            'CCC',         # propane
+            'N',           # ammonia (as N)
+            'NN',          # hydrazine
+            'C=O',         # formaldehyde
+            'CC=O',        # acetaldehyde
+            'O=C=O',       # carbon dioxide
+            '[NH3+]',      # ammonium
+            '[Na+]',       # sodium
+            '[Cl-]',       # chloride
+            '[K+]',        # potassium
+            '[Mg+2]',      # magnesium
+            '[Ca+2]',      # calcium
+        }
+        condition_df = condition_df[~condition_df['SMILES'].isin(cofactors)]
         
         # Remove rows with 0 flux 
         condition_df = condition_df[condition_df['flux_value'] != 0]
@@ -276,7 +306,7 @@ def map_paxdb_to_gene(paxdb_df: pd.DataFrame, df_enzymes: pd.DataFrame, p_total:
     # Fraction of protein in the cell
     enz_mapped["protein_fraction"] = enz_mapped["protein_ppm"] / 1000000
     
-    # Calculate protein_mol_gdcw: protein_ppm * p_total / molecular_weight
+    # Calculate protein_mol_gdcw: protein_fraction * p_total / molecular_weight
     # where p_total is the total protein content in g/gDCW
     # molecular_weight is in g/mol
     enz_mapped["protein_mol_gdcw"] = (
@@ -567,7 +597,7 @@ def get_kmax_homomeric(kapp_results: dict):
     # Select and rename relevant columns for output
     output_columns = [
         'sequence', 'SMILES', 'kcat_app', 'source_condition', 'source_p_total',
-        'gene', 'rxn', 'flux_value', 'protein_mmol_gdcw'  # Additional useful columns
+        'gene', 'rxn', 'flux_value', 'protein_mmol_gdcw', 'subsystem' # Additional useful columns
     ]
     
     # Keep only columns that exist in the dataframe
