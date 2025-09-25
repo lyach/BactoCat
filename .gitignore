@@ -48,6 +48,8 @@ Thumbs.db
 # Folders
 QE
 docs
+data/final
+data/discarded
 
 # Cache files
 cache/
