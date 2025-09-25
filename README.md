@@ -10,7 +10,28 @@ This repository contains curated datasets, processing scripts, and analysis note
 
 1. **Data exploration**: Start with notebooks in `experiments/` for current analyses
 2. **Data processing**: Use scripts in `scripts/` for data manipulation
-3. **Results**: Find processed outputs in `results/`
+3. **Results**: Find processed outputs in `data/final`
+
+## Environment set-up
+
+This project uses a reproducible Conda environment specified in `environment.yml`
+
+**1. Create the environment (first time)**
+```
+conda env create -f environment.yml
+```
+
+**2. Activate the environment**
+```
+conda activate bactocat_env
+```
+
+**3. Update the environment**
+```
+conda env update -f environment.yml --prune
+```
+- *NOTE:* `prune` removes packages not listed in the YAML. Do not include in the command if you've installed and wish to keep additional packages.
+
 
 ## Repository Structure
 

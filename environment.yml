@@ -1,0 +1,22 @@
+name: bactocat_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10 # using this version for cplex compatibility
+  - jupyterlab
+  - pyomo
+  - numpy=2.*
+  - rdkit
+  - cobra
+  - pandas
+  - scikit-learn
+  - symengine
+  - matplotlib
+  - seaborn
+  - pyarrow
+  - fastparquet
+  - pip
+  - pip:
+      - fair-esm
+      - torch
