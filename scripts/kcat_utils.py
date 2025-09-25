@@ -298,15 +298,17 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
 # Functions for specific kcat datasets
 # ============================================
 
-def load_kcat_dataset(CPIPred_dir, CatPred_dir) -> pd.DataFrame:
+def load_kcat_dataset_ecoli(CPIPred_dir, CatPred_dir, EnzyExtract_dir) -> pd.DataFrame:
     CPIPred_df = pd.read_csv(CPIPred_dir)
     CatPred_df = pd.read_csv(CatPred_dir)
+    EnzyExtract_df = pd.read_parquet(EnzyExtract_dir)
     
     # Keep only E coli data
     CPIPred_df = CPIPred_df[CPIPred_df['organism'].str.contains("Escherichia coli", case=False, na=False)]
     CatPred_df = CatPred_df[(CatPred_df['taxonomy_id'] == 562) | (CatPred_df['taxonomy_id'] == 83333)]
+    EnzyExtract_df = EnzyExtract_df[EnzyExtract_df['organism'].str.contains("Escherichia coli", case=False, na=False)]
     
-    # Clean for easy merge
+    # Keep and rename useful columns
     CPIPred_df = CPIPred_df[["SEQ", "CMPD_SMILES", "kcat"]]
     CPIPred_df = CPIPred_df[CPIPred_df['kcat'].notna()]
     CPIPred_df.rename(columns={"SEQ": "sequence", "CMPD_SMILES": "SMILES", "kcat": "kcat_CPIPred"}, inplace=True)
@@ -314,10 +316,13 @@ def load_kcat_dataset(CPIPred_dir, CatPred_dir) -> pd.DataFrame:
     CatPred_df = CatPred_df[["sequence", "reactant_smiles", "value"]]
     CatPred_df = CatPred_df[CatPred_df['value'].notna()]
     CatPred_df.rename(columns={'reactant_smiles': 'SMILES', "value": "kcat_CatPred"}, inplace=True)
+    
+    EnzyExtract_df = EnzyExtract_df[["sequence", "smiles", "kcat_value"]]
+    EnzyExtract_df.rename(columns={"kcat_value": "kcat_EnzyExtract", "smiles": "SMILES"}, inplace=True)
 
     #df_kcat = pd.concat([CPIPred_df, CatPred_df])
         
-    return CPIPred_df, CatPred_df
+    return CPIPred_df, CatPred_df, EnzyExtract_df
 
 
 def process_catpred_smiles(df: pd.DataFrame, smiles_col: str = 'reactant_smiles') -> pd.DataFrame:
