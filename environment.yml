@@ -1,0 +1,16 @@
+name: kapp_pipeline
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - glpk               # alternative solver for cplex (temporary)
+  - pandas
+  - matplotlib
+  - seaborn
+  - biopython
+  - rdkit
+  - pip:
+    - cobra
