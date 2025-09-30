@@ -456,23 +456,26 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
     print("\nCompleted kcat_app calculation for all conditions and p_total values")
     return kapp_results
 
-def evaluate_kapp_homomeric(kapp_results: dict, threshold: float = 1e6):
+def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lower_threshold: float = 1e-4):
     """
-    Evaluate kapp for homomeric enzymes by filtering out unrealistic high values.
+    Evaluate kapp for homomeric enzymes by filtering out unrealistic high and low values.
     
     Parameters:
         kapp_results: dict
             Nested dictionary with structure {condition: {p_total: dataframe}}
-        threshold: float
-            Threshold for filtering kcat_app values (default: 1e6 s⁻¹)
-            Rows with kcat_app > threshold will be removed
+        upper_threshold: float
+            Upper threshold for filtering kcat_app values (default: 1e6 s⁻¹)
+            Rows with kcat_app > upper_threshold will be removed
+        lower_threshold: float
+            Lower threshold for filtering kcat_app values (default: 1e-4 s⁻¹)
+            Rows with kcat_app < lower_threshold will be removed
     
     Returns:
         kapp_filtered_results: dict
             Same structure as input but with filtered dataframes
     """
     
-    print(f"Filtering kcat_app values above threshold: {threshold:.0e} s⁻¹")
+    print(f"Filtering kcat_app values outside range: {lower_threshold:.0e} to {upper_threshold:.0e} s⁻¹")
     
     # Initialize output dictionary
     kapp_filtered_results = {}
@@ -480,7 +483,8 @@ def evaluate_kapp_homomeric(kapp_results: dict, threshold: float = 1e6):
     # Track filtering statistics
     total_original_rows = 0
     total_filtered_rows = 0
-    total_removed_rows = 0
+    total_removed_high = 0
+    total_removed_low = 0
     
     # Double nested loop: for each condition, for each p_total value
     for condition_name, p_total_dict in kapp_results.items():
@@ -504,39 +508,55 @@ def evaluate_kapp_homomeric(kapp_results: dict, threshold: float = 1e6):
             original_count = len(df_filtered)
             print(f"    Original rows: {original_count}")
             
-            # Filter out rows where kcat_app exceeds threshold
-            # Keep rows where kcat_app is NaN, <= threshold, or missing
-            mask = (df_filtered['kcat_app'].isna()) | (df_filtered['kcat_app'] <= threshold)
+            # Count values that will be removed for each threshold
+            high_values = df_filtered['kcat_app'] > upper_threshold
+            low_values = df_filtered['kcat_app'] < lower_threshold
+            removed_high_count = high_values.sum()
+            removed_low_count = low_values.sum()
+            
+            # Filter out rows where kcat_app is outside the acceptable range
+            # Keep rows where kcat_app is NaN, or within [lower_threshold, upper_threshold]
+            mask = (df_filtered['kcat_app'].isna()) | ((df_filtered['kcat_app'] >= lower_threshold) & (df_filtered['kcat_app'] <= upper_threshold))
             df_filtered = df_filtered[mask]
             
             filtered_count = len(df_filtered)
-            removed_count = original_count - filtered_count
+            total_removed_count = original_count - filtered_count
             
             print(f"    Filtered rows: {filtered_count}")
-            print(f"    Removed rows: {removed_count}")
+            print(f"    Removed total: {total_removed_count} (high: {removed_high_count}, low: {removed_low_count})")
             
-            if removed_count > 0:
-                # Show some statistics about removed values
-                removed_values = df[~mask]['kcat_app'].dropna()
-                if len(removed_values) > 0:
-                    print(f"    Removed kcat_app range: {removed_values.min():.2e} to {removed_values.max():.2e} s⁻¹")
+            if removed_high_count > 0:
+                high_removed_values = df[high_values]['kcat_app'].dropna()
+                if len(high_removed_values) > 0:
+                    print(f"    Removed high values range: {high_removed_values.min():.2e} to {high_removed_values.max():.2e} s⁻¹")
+            
+            if removed_low_count > 0:
+                low_removed_values = df[low_values]['kcat_app'].dropna()
+                if len(low_removed_values) > 0:
+                    print(f"    Removed low values range: {low_removed_values.min():.2e} to {low_removed_values.max():.2e} s⁻¹")
             
             # Update statistics
             total_original_rows += original_count
             total_filtered_rows += filtered_count
-            total_removed_rows += removed_count
+            total_removed_high += removed_high_count
+            total_removed_low += removed_low_count
             
             # Store the filtered dataframe
             kapp_filtered_results[condition_name][p_total_value] = df_filtered
     
     # Print summary statistics
+    total_removed_rows = total_removed_high + total_removed_low
     print("\nFiltering Summary:")
     print(f"Total original rows: {total_original_rows}")
     print(f"Total filtered rows: {total_filtered_rows}")
     print(f"Total removed rows: {total_removed_rows}")
+    print(f"  - Removed high values (>{upper_threshold:.0e}): {total_removed_high}")
+    print(f"  - Removed low values (<{lower_threshold:.0e}): {total_removed_low}")
     if total_original_rows > 0:
         removal_percentage = (total_removed_rows / total_original_rows) * 100
-        print(f"Percentage removed: {removal_percentage:.1f}%")
+        high_percentage = (total_removed_high / total_original_rows) * 100
+        low_percentage = (total_removed_low / total_original_rows) * 100
+        print(f"Percentage removed: {removal_percentage:.1f}% (high: {high_percentage:.1f}%, low: {low_percentage:.1f}%)")
     
     return kapp_filtered_results
 

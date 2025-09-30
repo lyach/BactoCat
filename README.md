@@ -1,4 +1,4 @@
-# CatNivo Dataset
+# BactoCat Dataset
 
 A comprehensive dataset and analysis pipeline for *in vivo*-like kcat (catalytic turnover number) values, integrating multiple databases and metabolic models for enzyme kinetics research.
 
@@ -6,11 +6,6 @@ A comprehensive dataset and analysis pipeline for *in vivo*-like kcat (catalytic
 
 This repository contains curated datasets, processing scripts, and analysis notebooks for studying enzyme kinetics across different organisms.
 
-## Usage
-
-1. **Data exploration**: Start with notebooks in `experiments/` for current analyses
-2. **Data processing**: Use scripts in `scripts/` for data manipulation
-3. **Results**: Find processed outputs in `data/final`
 
 ## Environment set-up
 
@@ -28,48 +23,59 @@ conda activate bactocat_env
 
 **3. Update the environment**
 ```
-conda env update -f environment.yml --prune
+conda env update -f environment.yml 
 ```
-- *NOTE:* `prune` removes packages not listed in the YAML. Do not include in the command if you've installed and wish to keep additional packages.
+- *NOTE:* Include `--prune` at the end of this command to remove packages not listed in the YAML. If you've installed and wish to keep additional packages, run as it is.
+
+
+## Solver set-up
+
+The BactoCat pipeline relies on the IBM CPLEX Optimization Studio solver.
+To use CPLEX within this environment, install the Python API from your local CPLEX Studio installation (requires a valid academic or commercial license):
+```
+pip install "C:\Program Files\IBM\ILOG\CPLEX_Studio2211\cplex\python\3.10\x64_win64"
+```
+
+  - **NOTE**: CPLEX is not included on `environment.yml`. Each user must install it manually from their own licensed CPLEX Studio installation. Ensure your license environment variables (e.g., ILOG_LICENSE_FILE) are correctly configured.
+
 
 
 ## Repository Structure
 
 ### 📁 `data/`
-Main data directory organized by processing stage:
+Main data directory organized by processing stage. Only the `/raw` and `/results` folder are kept out of the `.gitignore`.
 
-#### `data/raw/` - Original, unprocessed datasets
+- `data/raw/` - Original, unprocessed datasets
 
-#### `data/processed/` - Processed and cleaned datasets
-- **`ECOMICS/`** - Processed ECOMICS data
-  - `fluxomics_ecomics_mapped.csv` - Mapped fluxomics data
-  - `eco_out_misses_curated.csv` - Curated missing data
-  - `iml1515_rxns.csv` - iML1515 model reactions
-- **`UniProt/`** - Protein mapping files from UniProt queries
+- `data/processed/` - Processed and cleaned datasets
+  - TO DO: Add subfolders
 
-#### `data/final/` - Final curated datasets
-- Currently empty - reserved for final processed datasets
+- `data/final/` - Final curated datasets
 
-#### `data/discarded/` - Archived datasets not used in final analysis
-- Contains various versions of cleaned and processed files that didn't make it to final analysis
+- `data/discarded/` - Archived datasets not used in final analysis. Contains previous versions of cleaned and processed files that didn't make it to final analysis.
 
 ### 📁 `scripts/`
 Data processing and analysis scripts:
 - **`enzyme_classifier.py`** - Script for classifying enzymes and their properties
+- TO DO: Add the rest
 
 ### 📁 `experiments/`
-- **`ECOMICS_fluxomics.ipynb`** - Analysis of ECOMICS fluxomics data
+- **`ECOMICS_fluxomics.ipynb`** - Complete processing and analysis of ECOMICS fluxomics data for *E. coli* 
+- **`flux_reconciliation.ipynb`** - Pipeline for reconciling ECOMICS fluxes using a 2 level LP approach. Discarded because of poor performance with ECOMICS data.
+- **`kapp_pipeline.ipynb`** - Complete processing and analysis of *in vivo*
+ $k_{cat}$ for *E. coli* 
+- **`load_invitro_datasets.ipynb`** - Loading and analyses of *in vitro* $k_{cat}$ for *E. coli* 
+- **`tsne_invivo_invitro.ipynb`** - Analysis of the functional space of *in vivo* and *in vitro* $k_{cat}$ for *E. coli* 
 
-### 📁 `old_experiments/`
-Archived experimental notebooks
-
-### 📁 `old_scripts/`
-Archived processing scripts
+### 📁 `old_experiments/`, 📁 `old_scripts/`
+Archived experimental notebooks and scripts
 
 ### 📁 `results/`
-Generated analysis results and outputs
+Generated results from analyses
 
 ### 📁 `misc/`
 Miscellaneous files
 
 
+### 📁 `QE/`
+Scripts used in Qualifier Examination results

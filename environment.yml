@@ -17,6 +17,7 @@ dependencies:
   - pyarrow
   - fastparquet
   - pip
+  - biopython
   - pip:
       - fair-esm
       - torch
