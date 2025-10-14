@@ -8,6 +8,7 @@ Utility functions for kcat visualization.
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import seaborn as sns
 from scipy import stats
 from typing import Tuple, Dict
 import warnings
@@ -292,6 +293,169 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
     ax.legend(frameon=True)
     
 
+def plot_eta_variability(df: pd.DataFrame, figsize: Tuple[int, int] = (12, 3)):
+    """
+    Visualize eta variability across enzyme-substrate pairs with comprehensive plots.
+    
+    Creates a 3 panel figure showing:
+    - Distribution of eta_mean values
+    - Coefficient of variation (CV) analysis
+    - Scatter plots of variance metrics
+    - Range analysis (min vs max)
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing eta variance metrics with columns:
+        'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv'
+    figsize : Tuple[int, int], default (18, 12)
+        Figure size for the plot grid
+    
+    Returns
+    -------
+    None
+        Function displays plots and prints summary statistics
+    """
+    
+    # Check required columns
+    required_cols = ['eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv']
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    
+    # Filter out rows with NaN values in eta_mean
+    df_clean = df[df['eta_mean'].notna()].copy()
+    
+    
+    print("="*80)
+    print("ETA VARIABILITY ANALYSIS")
+    print("="*80)
+    print(f"Total enzyme-substrate pairs analyzed: {len(df_clean):,}")
+    
+    print(f"\nEta Coefficient of Variation (CV) Statistics:")
+    cv_clean = df_clean[df_clean['eta_cv'].notna()]
+    if len(cv_clean) > 0:
+        print(f"  Mean:   {cv_clean['eta_cv'].mean():.3f}")
+        print(f"  Median: {cv_clean['eta_cv'].median():.3f}")
+        print(f"  Min:    {cv_clean['eta_cv'].min():.3f}")
+        print(f"  Max:    {cv_clean['eta_cv'].max():.3f}")
+    else:
+        print("  No valid CV values")
+    
+    print(f"\nEta Range Statistics:")
+    print(f"  Min eta across all conditions: {df_clean['eta_min'].min():.3f}")
+    print(f"  Max eta across all conditions: {df_clean['eta_max'].max():.3f}")
+    print("="*80)
+    
+    # Create the visualization
+    fig = plt.figure(figsize=figsize)
+    gs = fig.add_gridspec(1, 2, hspace=0.3, wspace=0.3)
+    
+    # Plot 1: Distribution of eta_mean 
+    ax1 = fig.add_subplot(gs[0, 0])
+    _plot_eta_mean_distribution(df_clean, ax1)
+    
+    # Plot 2: Distribution of eta_cv 
+    ax2 = fig.add_subplot(gs[0, 1])
+    _plot_eta_cv_distribution(df_clean, ax2)
+    
+    # Plot 3: Eta mean vs CV scatter
+    # ax3 = fig.add_subplot(gs[0, 2])
+    # _plot_eta_mean_vs_cv(df_clean, ax3)
+    
+    plt.show()
+
+
+def _plot_eta_mean_distribution(df: pd.DataFrame, ax: plt.Axes):
+    """Plot distribution of eta_mean values."""
+    data = df['eta_mean'].dropna()
+    
+    # Histogram
+    ax.hist(data, bins=30, alpha=0.7, color='steelblue', edgecolor='black', 
+            density=True, label=f'n={len(data):,}')
+    
+    # KDE overlay
+    try:
+        kde = stats.gaussian_kde(data)
+        x_range = np.linspace(data.min(), data.max(), 200)
+        ax.plot(x_range, kde(x_range), 'r-', linewidth=2)
+    except:
+        pass
+    
+    # Add vertical line at mean
+    ax.axvline(data.mean(), color='red', linestyle='--', linewidth=2, 
+               label=f'Mean={data.mean():.3f}')
+    ax.axvline(data.median(), color='green', linestyle='--', linewidth=2,
+               label=f'Median={data.median():.3f}')
+    
+    ax.set_xlabel('η mean', fontweight='bold')
+    ax.set_ylabel('Density', fontweight='bold')
+    ax.set_title('Distribution of Mean η Values')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+
+def _plot_eta_cv_distribution(df: pd.DataFrame, ax: plt.Axes):
+    """Plot distribution of coefficient of variation."""
+    data = df['eta_cv'].dropna()
+    
+    if len(data) == 0:
+        ax.text(0.5, 0.5, 'No CV data available', ha='center', va='center',
+                transform=ax.transAxes)
+        return
+    
+    # Histogram
+    ax.hist(data, bins=30, alpha=0.7, color='coral', edgecolor='black',
+            density=True, label=f'n={len(data):,}')
+    
+    # KDE overlay
+    try:
+        kde = stats.gaussian_kde(data)
+        x_range = np.linspace(data.min(), data.max(), 200)
+        ax.plot(x_range, kde(x_range), 'darkred', linewidth=2)
+    except:
+        pass
+    
+    ax.axvline(data.mean(), color='red', linestyle='--', linewidth=2,
+               label=f'Mean={data.mean():.3f}')
+    
+    ax.set_xlabel('Coefficient of Variation (CV)', fontweight='bold')
+    ax.set_ylabel('Density', fontweight='bold')
+    ax.set_title('Distribution of η CV')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+
+def _plot_eta_mean_vs_cv(df: pd.DataFrame, ax: plt.Axes):
+    """Scatter plot of eta_mean vs eta_cv."""
+    data = df[['eta_mean', 'eta_cv']].dropna()
+    
+    if len(data) == 0:
+        ax.text(0.5, 0.5, 'No data available', ha='center', va='center',
+                transform=ax.transAxes)
+        return
+    
+    # Scatter plot with alpha for overlapping points
+    scatter = ax.scatter(data['eta_mean'], data['eta_cv'], 
+                        alpha=0.5, s=20, c=data['eta_cv'], 
+                        cmap='viridis', edgecolors='k', linewidth=0.5)
+    
+    # Add colorbar
+    plt.colorbar(scatter, ax=ax, label='CV')
+    
+    # Add trend line if enough points
+    if len(data) > 10:
+        z = np.polyfit(data['eta_mean'], data['eta_cv'], 1)
+        p = np.poly1d(z)
+        x_trend = np.linspace(data['eta_mean'].min(), data['eta_mean'].max(), 100)
+        ax.plot(x_trend, p(x_trend), 'r--', linewidth=2, alpha=0.7,
+                label=f'y={z[0]:.2f}x+{z[1]:.2f}')
+    
+    ax.set_xlabel('η mean', fontweight='bold')
+    ax.set_ylabel('Coefficient of Variation (CV)', fontweight='bold')
+    ax.set_title('η Mean vs Variability')
+    ax.grid(True, alpha=0.3)
+    if len(data) > 10:
+        ax.legend()
+
 
 
 # ============================================
@@ -318,6 +482,7 @@ def load_kcat_dataset_ecoli(CPIPred_dir, CatPred_dir, EnzyExtract_dir) -> pd.Dat
     CatPred_df.rename(columns={'reactant_smiles': 'SMILES', "value": "kcat_CatPred"}, inplace=True)
     
     EnzyExtract_df = EnzyExtract_df[["sequence", "smiles", "kcat_value"]]
+    EnzyExtract_df = EnzyExtract_df.dropna(subset=['kcat_value', 'sequence', 'smiles'])
     EnzyExtract_df.rename(columns={"kcat_value": "kcat_EnzyExtract", "smiles": "SMILES"}, inplace=True)
 
     #df_kcat = pd.concat([CPIPred_df, CatPred_df])

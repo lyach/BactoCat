@@ -128,7 +128,7 @@ def _apply_medium_conditions(model: cobra.Model, medium_id: str) -> None:
             #"EX_nh4_e": -5.229, 
             "EX_so4_e": -1.699,
             "EX_o2_e": -14.49,
-            "EX_co2_e": 16.22,
+            #"EX_co2_e": 16.22,
             #"EX_h2o_e": -6.96
         }
     

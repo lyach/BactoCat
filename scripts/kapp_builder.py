@@ -456,7 +456,7 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
     print("\nCompleted kcat_app calculation for all conditions and p_total values")
     return kapp_results
 
-def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lower_threshold: float = 1e-4):
+def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lower_threshold: float = 1e-5):
     """
     Evaluate kapp for homomeric enzymes by filtering out unrealistic high and low values.
     
@@ -645,3 +645,131 @@ def get_kmax_homomeric(kapp_results: dict):
         print(f"  {condition}: {count} enzyme-substrate pairs")
     
     return kmax_results
+
+
+def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
+    """
+    Calculate eta (kapp/kmax) for each enzyme-substrate pair across all conditions and p_total values.
+    
+    Parameters:
+        kapp_results: dict
+            Nested dictionary with structure {condition: {p_total: dataframe}}
+        kmax_results: pd.DataFrame
+            DataFrame with maximum kcat_app values for each enzyme-substrate pair
+    
+    Returns:
+        tuple: (kapp_results_with_eta, kmax_results_with_variance)
+            - kapp_results_with_eta: dict with same structure as input but with 'eta' column added
+            - kmax_results_with_variance: DataFrame with added variance columns (eta_mean, eta_stdev, eta_min, eta_max, eta_cv)
+    """
+    
+    print("Calculating eta (kapp/kmax) for all conditions...")
+    
+    # Initialize output dictionary
+    kapp_results_with_eta = {}
+    
+    # List to collect all eta values for variance calculation
+    all_eta_values = []
+    
+    # Process each condition and p_total combination
+    for condition_name, p_total_dict in kapp_results.items():
+        print(f"\nProcessing condition: {condition_name}")
+        
+        # Initialize nested dictionary for this condition
+        kapp_results_with_eta[condition_name] = {}
+        
+        for p_total_value, df in p_total_dict.items():
+            print(f"  Processing p_total={p_total_value}")
+            
+            # Skip if dataframe is None
+            if df is None:
+                print("    Skipping - no data available")
+                kapp_results_with_eta[condition_name][p_total_value] = None
+                continue
+            
+            # Work with a copy
+            df_with_eta = df.copy()
+            
+            # Merge with kmax_results to get the maximum kcat_app value
+            df_with_eta = pd.merge(
+                df_with_eta,
+                kmax_results[['sequence', 'SMILES', 'kcat_app_max']],
+                on=['sequence', 'SMILES'],
+                how='left'
+            )
+            
+            # Calculate eta = kcat_app / kcat_app_max
+            df_with_eta['eta'] = df_with_eta['kcat_app'] / df_with_eta['kcat_app_max']
+            
+            # Replace infinite values with NaN
+            df_with_eta['eta'] = df_with_eta['eta'].replace([float('inf'), float('-inf')], float('nan'))
+            
+            # Count valid eta values
+            valid_eta = df_with_eta['eta'].notna().sum()
+            print(f"    Calculated eta for {valid_eta} enzyme-substrate pairs")
+            
+            # Store the dataframe with eta
+            kapp_results_with_eta[condition_name][p_total_value] = df_with_eta
+            
+            # Collect eta values for variance calculation
+            eta_data = df_with_eta[['sequence', 'SMILES', 'eta']].copy()
+            eta_data['source_condition'] = condition_name
+            eta_data['source_p_total'] = p_total_value
+            eta_data = eta_data[eta_data['eta'].notna()]  # Keep only valid eta values
+            
+            if len(eta_data) > 0:
+                all_eta_values.append(eta_data)
+    
+    # Calculate variance metrics for each enzyme-substrate pair
+    print("\nCalculating variance metrics for each enzyme-substrate pair...")
+    
+    if not all_eta_values:
+        print("No valid eta values found")
+        # Add empty variance columns to kmax_results
+        kmax_with_variance = kmax_results.copy()
+        kmax_with_variance['eta_mean'] = float('nan')
+        kmax_with_variance['eta_stdev'] = float('nan')
+        kmax_with_variance['eta_min'] = float('nan')
+        kmax_with_variance['eta_max'] = float('nan')
+        kmax_with_variance['eta_cv'] = float('nan')
+        return kapp_results_with_eta, kmax_with_variance
+    
+    # Concatenate all eta values
+    all_eta_df = pd.concat(all_eta_values, ignore_index=True)
+    print(f"Collected {len(all_eta_df)} eta values across all conditions")
+    
+    # Group by enzyme-substrate pair and calculate variance metrics
+    variance_metrics = all_eta_df.groupby(['sequence', 'SMILES'])['eta'].agg([
+        ('eta_mean', 'mean'),
+        ('eta_stdev', 'std'),
+        ('eta_min', 'min'),
+        ('eta_max', 'max'),
+        ('eta_count', 'count')
+    ]).reset_index()
+    
+    # Calculate coefficient of variation (CV = stdev / mean)
+    variance_metrics['eta_cv'] = variance_metrics['eta_stdev'] / variance_metrics['eta_mean']
+    
+    # Replace infinite CV values with NaN
+    variance_metrics['eta_cv'] = variance_metrics['eta_cv'].replace([float('inf'), float('-inf')], float('nan'))
+    
+    # Merge variance metrics with kmax_results
+    kmax_with_variance = pd.merge(
+        kmax_results,
+        variance_metrics[['sequence', 'SMILES', 'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv']],
+        on=['sequence', 'SMILES'],
+        how='left'
+    )
+    
+    print(f"Added variance metrics to {len(kmax_with_variance)} enzyme-substrate pairs")
+    print(f"Pairs with variance data: {kmax_with_variance['eta_mean'].notna().sum()}")
+    
+    # Show summary statistics
+    if len(variance_metrics) > 0:
+        print("\nEta variance summary:")
+        print(f"  Mean eta_mean: {variance_metrics['eta_mean'].mean():.3f}")
+        print(f"  Mean eta_stdev: {variance_metrics['eta_stdev'].mean():.3f}")
+        print(f"  Mean eta_cv: {variance_metrics['eta_cv'].mean():.3f}")
+    
+    print("\nCompleted eta calculation for all conditions")
+    return kapp_results_with_eta, kmax_with_variance

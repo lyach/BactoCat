@@ -1,7 +1,7 @@
 rxn_id,exp_fixed_flux
-EX_o2_e,158.6
-EX_glc__D_e,100.0
-EX_ac_e,69.6
-EX_co2_e,175.2
-EX_so4_e,1.7
 EX_nh4_e,50.1
+EX_ac_e,69.6
+EX_glc__D_e,100.0
+EX_o2_e,158.6
+EX_so4_e,1.7
+EX_co2_e,175.2
