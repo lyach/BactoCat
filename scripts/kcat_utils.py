@@ -456,6 +456,46 @@ def _plot_eta_mean_vs_cv(df: pd.DataFrame, ax: plt.Axes):
     if len(data) > 10:
         ax.legend()
 
+def group_eta_variability(csv_path, deduplicate=False):
+    """
+    Load in vivo kcat with eta and stratify into high vs low variance groups.
+    
+    Parameters
+    ----------
+    csv_path : str or Path
+        Path to the CSV file containing the in vivo variability data
+        
+    Returns
+    -------
+    pd.DataFrame
+        Deduplicated dataframe with variance_group column added
+    """
+    # Load dataset
+    df = pd.read_csv(csv_path)
+    
+    # Stratify into high vs low variance groups
+    high_var_threshold = df['eta_cv'].quantile(0.75)
+    low_var_threshold = df['eta_cv'].quantile(0.25)
+    
+    # Groups: medium, high, low
+    df['variance_group'] = 'medium'
+    df.loc[df['eta_cv'] >= high_var_threshold, 'variance_group'] = 'high'
+    df.loc[df['eta_cv'] <= low_var_threshold, 'variance_group'] = 'low'
+    
+    if deduplicate:
+        # Deduplicate by gene (keeping first)
+        print(f"Total rows before deduplication: {len(df)}")
+        df_unique = df.drop_duplicates(subset='gene', keep='first')
+        print(f"Total rows after deduplication: {len(df_unique)}")
+        print(f"{len(df) - len(df_unique)} duplicate genes removed")
+        df = df_unique
+    
+    # Show breakdown by group
+    print(f"\nHigh variance: {(df['variance_group']=='high').sum()} enzymes")
+    print(f"Low variance: {(df['variance_group']=='low').sum()} enzymes")
+    print(f"Medium variance: {(df['variance_group']=='medium').sum()} enzymes")
+    
+    return df
 
 
 # ============================================
