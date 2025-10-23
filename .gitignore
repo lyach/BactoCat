@@ -53,3 +53,7 @@ data/discarded
 
 # Cache files
 cache/
+
+# uv
+uv.lock
+.venv/

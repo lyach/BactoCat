@@ -9,7 +9,9 @@ This repository contains curated datasets, processing scripts, and analysis note
 
 ## Environment set-up
 
-This project uses a reproducible Conda environment specified in `environment.yml`
+### Using `conda`
+
+A reproducible Conda environment can be built using the `environment.yml`
 
 **1. Create the environment (first time)**
 ```
@@ -26,6 +28,52 @@ conda activate bactocat_env
 conda env update -f environment.yml 
 ```
 - *NOTE:* Include `--prune` at the end of this command to remove packages not listed in the YAML. If you've installed and wish to keep additional packages, run as it is.
+
+### Using `uv`
+
+The following steps will set up a reproducible Python environment using `uv`. This approach avoids dependency conflicts and works seamlessly on HPC clusters.
+
+**1. Install uv**
+
+This will install a single static binary in your `$HOME/bin`:
+```
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+**2. Navigate to the repository**
+```
+cd ~/BactoCat
+```
+
+**3. Create a virtual environment**
+
+Creates an isolated environment inside the repository:
+```
+uv venv .venv
+```
+
+**4. Activate venv**
+```
+source .venv/bin/activate
+```
+
+**5. Install dependencies**
+Synchronize and install all dependencies listed in `pyproject.toml`:
+```
+uv sync
+```
+   This automatically resolves and locks dependencies for reproducibility (`uv.lock` file).
+
+**Updating the environment**
+
+Whenever you modify dependencies (add or update a package), run:
+```
+uv sync --upgrade
+```
+
+or to install a single new package:
+```
+uv add <package-name>
+```
 
 
 ## Solver set-up
