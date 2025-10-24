@@ -13,7 +13,7 @@ Functions:
 - apply_pca_reduction: Apply PCA dimensionality reduction for denoising
 - create_tsne_plot: Create t-SNE visualization colored by dataset
 - analyze_coverage: Analyze coverage, gaps, and local comparisons
-- run_tsne_pipeline: Complete pipeline execution
+- run_tsne_pipeline_invivo_invitro: Complete pipeline execution
 """
 
 import os
@@ -258,6 +258,57 @@ def create_tsne_plot(embeddings: np.ndarray,
     else:
         ax.legend(handles, labels_legend, loc='lower right')
 
+    ax.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to: {save_path}")
+    
+    return fig
+
+
+def create_tsne_plot_variability(embeddings: np.ndarray, 
+                                labels: np.ndarray,
+                                title: str = "t-SNE: High vs Low Variability Enzyme-Substrate Space",
+                                figsize: Tuple[int, int] = (12, 8),
+                                save_path: Optional[str] = None) -> plt.Figure:
+    """
+    Create t-SNE visualization colored by variability (blue for low, red for high).
+    """
+    # Run t-SNE
+    print("Running t-SNE...")
+    # Handle different scikit-learn versions (n_iter vs max_iter)
+    try:
+        tsne = TSNE(n_components=2, random_state=42, perplexity=30, max_iter=1000)
+    except TypeError:
+        # Fallback for older scikit-learn versions
+        tsne = TSNE(n_components=2, random_state=42, perplexity=30, n_iter=1000)
+    
+    embeddings_2d = tsne.fit_transform(embeddings)
+    
+    # Create plot
+    fig, ax = plt.subplots(figsize=figsize)
+    
+    # Plot low variability data (blue circles)
+    low_var_mask = labels == 0
+    if np.any(low_var_mask):
+        ax.scatter(embeddings_2d[low_var_mask, 0], embeddings_2d[low_var_mask, 1], 
+                  c='#3498DB', marker='o', label='Low Variability', alpha=0.7, s=25, linewidths=0.5)
+    
+    # Plot high variability data (red circles)
+    high_var_mask = labels == 1
+    if np.any(high_var_mask):
+        ax.scatter(embeddings_2d[high_var_mask, 0], embeddings_2d[high_var_mask, 1], 
+                  c='#E74C3C', marker='o', label='High Variability', alpha=0.7, s=25, linewidths=0.5)
+    
+    ax.set_xlabel('t-SNE 1')
+    ax.set_ylabel('t-SNE 2')
+    ax.set_title(title, fontstyle='italic')
+    
+    # Create legend
+    ax.legend(loc='lower right')
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
@@ -546,7 +597,7 @@ def create_coverage_plot(coverage_results: Dict,
     return fig
 
 
-def run_tsne_pipeline(all_seqs_file: str,
+def run_tsne_pipeline_invivo_invitro(all_seqs_file: str,
                      kmax_file: str, 
                      catpred_file: str,
                      output_dir: str = "results/tsne_analysis",
@@ -577,7 +628,7 @@ def run_tsne_pipeline(all_seqs_file: str,
     print(f"Computing embeddings for {len(unique_sequences)} unique sequences...")
     
     protein_embeddings = get_protein_embeddings(unique_sequences, 
-                                               cache_dir=os.path.join(cache_dir, "protein_embeddings"))
+                                               cache_dir=os.path.join(cache_dir, "protein_embeddings", "invivo_invitro"))
     
     # Create mapping from sequence to embedding
     seq_to_embedding = dict(zip(unique_sequences, protein_embeddings))
@@ -755,6 +806,161 @@ def run_tsne_pipeline(all_seqs_file: str,
     print(f"  - Enzyme-substrate space regions with both datasets: {coverage_results['both_datasets_fraction']:.1%}")
     print(f"  - Regions with only in vitro data: {coverage_results['in_vitro_only_fraction']:.1%}")
     print(f"  - Regions with only in vivo data: {coverage_results['in_vivo_only_fraction']:.1%}")
+    
+    return results
+
+
+def run_tsne_pipeline_variability(eta_grouped_file: str,
+                                 output_dir: str = "results/tsne_variability_analysis",
+                                 pca_components: int = 100,
+                                 cache_dir: str = "cache",
+                                 use_substrates: bool = False) -> Dict:
+    """
+    Complete t-SNE pipeline for analyzing high vs low variability enzyme data.
+    """
+    print("=== Starting t-SNE Variability Pipeline ===")
+    
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Load data
+    print("Loading variability data...")
+    eta_data = pd.read_csv(eta_grouped_file)
+    
+    print(f"Total entries: {len(eta_data)}")
+    
+    # Create separate dataframes for high and low variability
+    high_var_data = eta_data[eta_data['variance_group'] == 'high'].copy()
+    low_var_data = eta_data[eta_data['variance_group'] == 'low'].copy()
+    
+    print(f"High variability entries: {len(high_var_data)}")
+    print(f"Low variability entries: {len(low_var_data)}")
+    
+    # Combine all data for processing
+    all_data = pd.concat([high_var_data, low_var_data], ignore_index=True)
+    
+    # Step 1: Get protein embeddings
+    print("\n=== Step 1: Computing protein embeddings ===")
+    unique_sequences = all_data['sequence'].unique()
+    print(f"Computing embeddings for {len(unique_sequences)} unique sequences...")
+    
+    protein_embeddings = get_protein_embeddings(unique_sequences, 
+                                               cache_dir=os.path.join(cache_dir, "protein_embeddings", "variability"))
+    
+    # Create mapping from sequence to embedding
+    seq_to_embedding = dict(zip(unique_sequences, protein_embeddings))
+    
+    # Map embeddings to all sequences
+    all_protein_embeddings = np.array([seq_to_embedding[seq] for seq in all_data['sequence']])
+    
+    if use_substrates:
+        # Step 2: Get substrate embeddings
+        print("\n=== Step 2: Computing substrate embeddings ===")
+        substrate_embeddings = get_substrate_embeddings(all_data['SMILES'].tolist())
+        
+        # Step 3: Combine and scale embeddings
+        print("\n=== Step 3: Combining and scaling embeddings ===")
+        combined_embeddings, scaler = create_combined_embeddings(all_protein_embeddings, substrate_embeddings)
+        
+        print(f"Combined embeddings shape: {combined_embeddings.shape}")
+    else:
+        # Use only protein embeddings
+        print("\n=== Using protein embeddings only ===")
+        scaler = StandardScaler()
+        combined_embeddings = scaler.fit_transform(all_protein_embeddings)
+        print(f"Protein embeddings shape: {combined_embeddings.shape}")
+    
+    # Step 4: PCA reduction
+    print("\n=== Step 4: Applying PCA reduction ===")
+    pca_embeddings, pca = apply_pca_reduction(combined_embeddings, n_components=pca_components)
+    
+    # Step 5: Create labels for variability groups
+    print("\n=== Step 5: Creating variability labels ===")
+    
+    # Create labels: 0 = low variability, 1 = high variability
+    labels = []
+    for _, row in all_data.iterrows():
+        if row['variance_group'] == 'low':
+            labels.append(0)
+        elif row['variance_group'] == 'high':
+            labels.append(1)
+        else:
+            labels.append(-1)  # Unknown group
+    
+    labels = np.array(labels)
+    
+    # Filter out entries with unknown variability groups
+    valid_mask = labels >= 0
+    pca_embeddings_filtered = pca_embeddings[valid_mask]
+    labels_filtered = labels[valid_mask]
+    
+    print(f"Low variability entries: {np.sum(labels_filtered == 0)}")
+    print(f"High variability entries: {np.sum(labels_filtered == 1)}")
+    
+    # Step 6: Create t-SNE plot
+    print("\n=== Step 6: Creating t-SNE visualization ===")
+    
+    tsne_fig = create_tsne_plot_variability(pca_embeddings_filtered, 
+                                           labels_filtered,
+                                           save_path=os.path.join(output_dir, "tsne_variability_analysis.png"))
+    
+    # Get 2D embeddings for analysis
+    # Handle different scikit-learn versions (n_iter vs max_iter)
+    try:
+        tsne = TSNE(n_components=2, random_state=42, perplexity=30, max_iter=1000)
+    except TypeError:
+        # Fallback for older scikit-learn versions
+        tsne = TSNE(n_components=2, random_state=42, perplexity=30, n_iter=1000)
+    
+    embeddings_2d = tsne.fit_transform(pca_embeddings_filtered)
+    
+    # Step 7: Coverage analysis
+    print("\n=== Step 7: Analyzing coverage ===")
+    dataset_names = ['Low Variability', 'High Variability']
+    coverage_results = analyze_coverage(embeddings_2d, labels_filtered, dataset_names)
+    
+    # Print coverage statistics
+    print(f"Coverage Statistics:")
+    print(f"  Low variability only: {coverage_results['in_vitro_only_fraction']:.1%}")
+    print(f"  High variability only: {coverage_results['in_vivo_only_fraction']:.1%}")  
+    print(f"  Both groups: {coverage_results['both_datasets_fraction']:.1%}")
+    print(f"  No coverage: {coverage_results['no_coverage_fraction']:.1%}")
+    
+    # Create coverage plot
+    coverage_fig = create_coverage_plot(coverage_results, dataset_names,
+                                       save_path=os.path.join(output_dir, "coverage_analysis_variability.png"))
+    
+    # Save results
+    results = {
+        'eta_data': eta_data,
+        'high_var_data': high_var_data,
+        'low_var_data': low_var_data,
+        'combined_embeddings': combined_embeddings,
+        'pca_embeddings': pca_embeddings_filtered,
+        'embeddings_2d': embeddings_2d,
+        'labels': labels_filtered,
+        'dataset_names': dataset_names,
+        'coverage_results': coverage_results,
+        'scaler': scaler,
+        'pca': pca,
+        'tsne_fig': tsne_fig,
+        'coverage_fig': coverage_fig
+    }
+    
+    # Save embeddings and results
+    results_file = os.path.join(output_dir, "tsne_variability_results.pkl")
+    with open(results_file, 'wb') as f:
+        # Don't save the figures to avoid issues
+        save_results = {k: v for k, v in results.items() if 'fig' not in k}
+        pickle.dump(save_results, f)
+    
+    print(f"\n=== Pipeline Complete ===")
+    print(f"Results saved to: {output_dir}")
+    print(f"Key findings:")
+    print(f"  - Total enzyme-substrate pairs analyzed: {len(labels_filtered)}")
+    print(f"  - Enzyme-substrate space regions with both groups: {coverage_results['both_datasets_fraction']:.1%}")
+    print(f"  - Regions with only low variability data: {coverage_results['in_vitro_only_fraction']:.1%}")
+    print(f"  - Regions with only high variability data: {coverage_results['in_vivo_only_fraction']:.1%}")
     
     return results
 

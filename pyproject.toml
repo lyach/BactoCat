@@ -1,0 +1,24 @@
+[project]
+name = "bactocat_env"
+version = "0.1.0"
+requires-python = "~=3.10"
+dependencies = [
+    "jupyterlab",
+    "pyomo",
+    "numpy~=2.0", 
+    "rdkit",
+    "cobra",
+    "pandas",
+    "scikit-learn",
+    "symengine",
+    "matplotlib",
+    "seaborn",
+    "pyarrow",
+    "fastparquet",
+    "biopython",
+    "fair-esm",
+    "torch",
+]
+
+[tool.uv]
+index-url = "https://pypi.org/simple"
