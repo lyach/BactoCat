@@ -421,17 +421,3 @@ def map_PaxDB_to_UniProt(PaxDB_df, taxon_ID="9606"):
     print(f"Created mapping file {output_file}")
 
     return protein_mapping_df
-
-
-if __name__ == "__main__":
-    import argparse
-    
-    parser = argparse.ArgumentParser(description='Map gene IDs from a GEM to UniProt IDs')
-    parser.add_argument('--model_id', type=str, required=True, 
-                       help='Model ID (e.g., iML1515) or SBML file path')
-    parser.add_argument('--organism', type=str, required=True, 
-                       help='Organism name (e.g., E coli)')    
-    args = parser.parse_args()
-    
-    # Run the mapping function
-    map_gem_genes_to_uniprot(args.model_id, args.organism)
