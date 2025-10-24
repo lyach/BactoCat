@@ -16,6 +16,7 @@ from cobra import flux_analysis
 from itertools import product
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 
+
 def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model, 
                               carbon_uptake: list, oxygen_uptake: list):
     """
@@ -92,6 +93,85 @@ def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model,
     return fluxomics_df
 
 
+def create_FVA_dataframe(fva_results, GEM: cobra.Model):
+    """
+    Create a DataFrame from FVA results for a given GEM model.
+
+    Parameters:
+    fva_results : FVASolution
+        The result of FVA computation containing `lower_bound` and `upper_bound` arrays.
+    GEM : cobra.Model
+        The COBRApy metabolic model corresponding to the FVA results. 
+        Reaction IDs must match the order used in FVA.
+
+    Returns:
+    A DataFrame with columns:
+        - 'rxn_id': reaction IDs from the GEM model
+        - 'FVA_lower': lower bound of each reaction flux from FVA
+        - 'FVA_upper': upper bound of each reaction flux from FVA
+    """
+    fva_df = pd.DataFrame({
+        'rxn_id': [rxn.id for rxn in GEM.reactions],  # same order as in fluxomics_df
+        'FVA_lower': fva_results.lower_bound,
+        'FVA_upper': fva_results.upper_bound
+    })
+
+    return fva_df
+
+
+def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bool = False):
+    """
+    Check if flux values from pFBA (or FBA) are within FVA bounds and optionally remove out-of-bound values.
+
+    Returns:
+        (filtered_fluxomics_df, violations_df)
+    """
+    merged_df = fluxomics_df.merge(fva_df, on='rxn_id', how='left')
+    merged_df = merged_df.dropna(subset=['FVA_lower', 'FVA_upper'])  # avoid NaNs
+
+    # Restrict to numeric flux columns only
+    flux_cols = [col for col in merged_df.columns if col.startswith('flux_') or col.startswith('pfba_')]
+
+    violations = []
+    for col in flux_cols:
+        below_mask = merged_df[col] < merged_df['FVA_lower']
+        above_mask = merged_df[col] > merged_df['FVA_upper']
+
+        for idx in merged_df[below_mask].index:
+            violations.append({
+                'rxn_id': merged_df.at[idx, 'rxn_id'],
+                'condition': col,
+                'flux': merged_df.at[idx, col],
+                'FVA_lower': merged_df.at[idx, 'FVA_lower'],
+                'FVA_upper': merged_df.at[idx, 'FVA_upper'],
+                'violation_type': 'below_min'
+            })
+
+        for idx in merged_df[above_mask].index:
+            violations.append({
+                'rxn_id': merged_df.at[idx, 'rxn_id'],
+                'condition': col,
+                'flux': merged_df.at[idx, col],
+                'FVA_lower': merged_df.at[idx, 'FVA_lower'],
+                'FVA_upper': merged_df.at[idx, 'FVA_upper'],
+                'violation_type': 'above_max'
+            })
+
+    violations_df = pd.DataFrame(violations)
+    print(f"Detected {len(violations_df)} violations of FVA bounds.")
+
+    if filter and not violations_df.empty:
+        print("Filtering fluxomics_df: removing fluxes outside FVA bounds.")
+        violating_rxns = violations_df['rxn_id'].unique()
+        before = len(merged_df)
+        merged_df = merged_df[~merged_df['rxn_id'].isin(violating_rxns)].copy()
+        after = len(merged_df)
+        print(f"Filtered out {before - after} reactions with violations.")
+
+    filtered_fluxomics_df = merged_df.copy()
+    return filtered_fluxomics_df, violations_df
+
+
 def load_dataframe_if_path(data_input):
     """
     Auxiliary function to load dataframe from CSV path or return existing dataframe.
@@ -154,7 +234,7 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         
         # == Fluxomics info ==
         # Merge with specific flux condition
-        flux_subset = fluxomics_df[['rxn_id', flux_col]].copy()
+        flux_subset = fluxomics_df[['rxn_id', flux_col, 'FVA_lower', 'FVA_upper']].copy()
         flux_subset.rename(columns={flux_col: 'flux_value'}, inplace=True)
         
         condition_df = pd.merge(condition_df, flux_subset, left_on="rxn", right_on="rxn_id", how="left")
@@ -617,7 +697,7 @@ def get_kmax_homomeric(kapp_results: dict):
     # Select and rename relevant columns for output
     output_columns = [
         'sequence', 'SMILES', 'kcat_app', 'source_condition', 'source_p_total',
-        'gene', 'rxn', 'flux_value', 'protein_mmol_gdcw', 'subsystem' # Additional useful columns
+        'gene', 'rxn', 'flux_value', 'FVA_upper', 'FVA_lower', 'protein_mmol_gdcw', 'subsystem' # Additional useful columns
     ]
     
     # Keep only columns that exist in the dataframe
