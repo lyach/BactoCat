@@ -15,7 +15,9 @@ import pandas as pd
 from cobra import flux_analysis
 from itertools import product
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
-
+from cobra.io import read_sbml_model
+from scripts.FVA_integration.fvfa import fva_solve_faster
+from scripts.FVA_integration.utils import cobra_to_fva_problem
 
 def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model, 
                               carbon_uptake: list, oxygen_uptake: list):
@@ -93,83 +95,154 @@ def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model,
     return fluxomics_df
 
 
-def create_FVA_dataframe(fva_results, GEM: cobra.Model):
+def create_FVA_dataframe(GEM_path: str, 
+                                        carbon_uptake: list, 
+                                        oxygen_uptake: list,
+                                        mu_fraction: float = 0.9):
     """
-    Create a DataFrame from FVA results for a given GEM model.
-
-    Parameters:
-    fva_results : FVASolution
-        The result of FVA computation containing `lower_bound` and `upper_bound` arrays.
-    GEM : cobra.Model
-        The COBRApy metabolic model corresponding to the FVA results. 
-        Reaction IDs must match the order used in FVA.
-
-    Returns:
-    A DataFrame with columns:
-        - 'rxn_id': reaction IDs from the GEM model
-        - 'FVA_lower': lower bound of each reaction flux from FVA
-        - 'FVA_upper': upper bound of each reaction flux from FVA
+    Run FVA for all combinations of carbon and oxygen uptake rates, 
+    matching the structure of create_fluxomics_dataframe().
+    
+    Parameters
+    ----------
+    GEM_path : str
+        Path to the SBML model file (XML).
+    carbon_uptake : list
+        List of carbon uptake rates to test.
+    oxygen_uptake : list
+        List of oxygen uptake rates to test.
+    mu_fraction : float, optional
+        Fraction of optimal growth rate for FVA (default = 0.9).
+    
+    Returns
+    -------
+    pd.DataFrame
+        Combined FVA dataframe with columns:
+        ['rxn_id', 'FVA_lower_cond1', 'FVA_upper_cond1', ..., 'FVA_lower_condN', 'FVA_upper_condN']
     """
-    fva_df = pd.DataFrame({
-        'rxn_id': [rxn.id for rxn in GEM.reactions],  # same order as in fluxomics_df
+    
+    # Create all combinations of carbon and oxygen uptake rates
+    uptake_combinations = list(product(carbon_uptake, oxygen_uptake))
+    
+    # Load base model once
+    base_model = read_sbml_model(GEM_path)
+    rxn_ids = [rxn.id for rxn in base_model.reactions]
+    
+    # Initialize dictionaries for lower/upper bounds
+    FVA_lower_results = {}
+    FVA_upper_results = {}
+    
+    for i, (carbon_rate, oxygen_rate) in enumerate(uptake_combinations, 1):
+        print(f"Running FVA condition {i}: Carbon={carbon_rate}, Oxygen={oxygen_rate}")
+        
+        # Copy model to avoid media interference
+        model_copy = base_model.copy()
+        
+        # Set medium
+        try:
+            model_copy.reactions.EX_glc__D_e.lower_bound = -abs(carbon_rate)
+        except KeyError:
+            print("Warning: Carbon uptake reaction not found. Skipping.")
+        try:
+            model_copy.reactions.EX_o2_e.lower_bound = -abs(oxygen_rate)
+        except KeyError:
+            print("Warning: Oxygen uptake reaction not found. Skipping.")
+        
+        # Optimize and get optimal mu
+        solution = model_copy.optimize()
+        if solution.status != 'optimal':
+            print(f"Warning: optimization failed at condition {i} with status:({solution.status}), filling with NaNs.")
+            FVA_lower_results[f'FVA_lower_cond{i}'] = [float('nan')] * len(rxn_ids)
+            FVA_upper_results[f'FVA_upper_cond{i}'] = [float('nan')] * len(rxn_ids)
+            continue
+        
+        mu = solution.objective_value
+        
+        # Build FVA problem
+        problem = cobra_to_fva_problem(model_copy, mu)
+        problem.mu = mu_fraction
+        
+        # Run FVA
+        fva_results = fva_solve_faster(problem)
+        fva_df = pd.DataFrame({
+        'rxn_id': [rxn.id for rxn in model_copy.reactions],
         'FVA_lower': fva_results.lower_bound,
         'FVA_upper': fva_results.upper_bound
-    })
-
-    return fva_df
+    }) 
+        
+        # Store FVA lower/upper bounds
+        FVA_lower_results[f'FVA_lower_cond{i}'] = fva_df['FVA_lower'].values
+        FVA_upper_results[f'FVA_upper_cond{i}'] = fva_df['FVA_upper'].values
+        
+        print(f"Condition {i} completed successfully.")
+    
+    # Build the output dataframe
+    fva_combined = pd.DataFrame({'rxn_id': rxn_ids})
+    
+    for col_name, values in FVA_lower_results.items():
+        fva_combined[col_name] = values
+    for col_name, values in FVA_upper_results.items():
+        fva_combined[col_name] = values
+    
+    print(f"FVA dataframe created with {len(uptake_combinations)} conditions.")
+    return fva_combined
 
 
 def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bool = False):
     """
-    Check if flux values from pFBA (or FBA) are within FVA bounds and optionally remove out-of-bound values.
-
+    Check fluxes against FVA bounds for all conditions and optionally filter out reactions with violations.
+    
     Returns:
-        (filtered_fluxomics_df, violations_df)
+        filtered_fluxomics_df, violations_df
     """
     merged_df = fluxomics_df.merge(fva_df, on='rxn_id', how='left')
-    merged_df = merged_df.dropna(subset=['FVA_lower', 'FVA_upper'])  # avoid NaNs
-
-    # Restrict to numeric flux columns only
-    flux_cols = [col for col in merged_df.columns if col.startswith('flux_') or col.startswith('pfba_')]
-
+    
+    # Identify flux columns
+    flux_cols = [col for col in merged_df.columns if col.startswith('flux_cond')]
+    
     violations = []
+    
     for col in flux_cols:
-        below_mask = merged_df[col] < merged_df['FVA_lower']
-        above_mask = merged_df[col] > merged_df['FVA_upper']
-
+        # Map flux column to corresponding FVA lower/upper columns
+        cond_num = col.split('flux_cond')[-1]
+        lower_col = f'FVA_lower_cond{cond_num}'
+        upper_col = f'FVA_upper_cond{cond_num}'
+        
+        below_mask = merged_df[col] < merged_df[lower_col]
+        above_mask = merged_df[col] > merged_df[upper_col]
+        
         for idx in merged_df[below_mask].index:
             violations.append({
                 'rxn_id': merged_df.at[idx, 'rxn_id'],
                 'condition': col,
                 'flux': merged_df.at[idx, col],
-                'FVA_lower': merged_df.at[idx, 'FVA_lower'],
-                'FVA_upper': merged_df.at[idx, 'FVA_upper'],
+                'FVA_lower': merged_df.at[idx, lower_col],
+                'FVA_upper': merged_df.at[idx, upper_col],
                 'violation_type': 'below_min'
             })
-
         for idx in merged_df[above_mask].index:
             violations.append({
                 'rxn_id': merged_df.at[idx, 'rxn_id'],
                 'condition': col,
                 'flux': merged_df.at[idx, col],
-                'FVA_lower': merged_df.at[idx, 'FVA_lower'],
-                'FVA_upper': merged_df.at[idx, 'FVA_upper'],
+                'FVA_lower': merged_df.at[idx, lower_col],
+                'FVA_upper': merged_df.at[idx, upper_col],
                 'violation_type': 'above_max'
             })
-
+    
     violations_df = pd.DataFrame(violations)
     print(f"Detected {len(violations_df)} violations of FVA bounds.")
-
+    
     if filter and not violations_df.empty:
-        print("Filtering fluxomics_df: removing fluxes outside FVA bounds.")
         violating_rxns = violations_df['rxn_id'].unique()
         before = len(merged_df)
         merged_df = merged_df[~merged_df['rxn_id'].isin(violating_rxns)].copy()
         after = len(merged_df)
         print(f"Filtered out {before - after} reactions with violations.")
-
+    
     filtered_fluxomics_df = merged_df.copy()
     return filtered_fluxomics_df, violations_df
+
 
 
 def load_dataframe_if_path(data_input):
@@ -231,13 +304,22 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         
         # Create a copy of enzymes_df for this condition
         condition_df = enzymes_df.copy()
-        
+
+        # Determine condition number for matching FVA columns
+        condition_num = flux_col.split('flux_cond')[-1]
+        fva_lower_col = f'FVA_lower_cond{condition_num}'
+        fva_upper_col = f'FVA_upper_cond{condition_num}'
+
         # == Fluxomics info ==
         # Merge with specific flux condition
-        flux_subset = fluxomics_df[['rxn_id', flux_col, 'FVA_lower', 'FVA_upper']].copy()
-        flux_subset.rename(columns={flux_col: 'flux_value'}, inplace=True)
-        
+        flux_subset = fluxomics_df[['rxn_id', flux_col, fva_lower_col, fva_upper_col]].copy()
+        flux_subset.rename(columns={
+            flux_col: 'flux_value',
+            fva_lower_col: 'FVA_lower',
+            fva_upper_col: 'FVA_upper'
+        }, inplace=True)
         condition_df = pd.merge(condition_df, flux_subset, left_on="rxn", right_on="rxn_id", how="left")
+
         
         # == Substrate info ==
         # Clean substrates df - kinGEMs specific
