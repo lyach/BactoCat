@@ -50,6 +50,9 @@ QE
 docs
 data/final
 data/discarded
+misc/*
+notebooks/*
+scripts/*
 
 # Cache files
 cache/
@@ -57,3 +60,4 @@ cache/
 # uv
 uv.lock
 .venv/
+
