@@ -1,0 +1,31 @@
+# Configuration file for kapp pipeline
+# Homomeric kmax calculation for E. coli (iML1515)
+
+# ==== Model Configuration ====
+organism: "ecoli"
+model_path: "../data/raw/GEMs/iML1515_GEM.xml"
+solver: "cplex"
+flux_method: "pFBA"
+
+# ==== Flux Simulation Parameters ====
+carbon_uptake: [2, 6, 10]
+oxygen_uptake: [15, 17.5, 20]
+
+# ==== Proteomics Parameters ====
+p_total: [0.32, 0.435, 0.55]
+paxdb_path: "../data/raw/PaxDb/511145_ecoli/511145-WHOLE_ORGANISM-integrated.txt"
+
+# ==== Input Data Files ====
+substrate_df: "../data/processed/kinGEMs_iML1515/iML1515_substrates.csv"
+sequence_df: "../data/processed/UniProt/iML1515_E coli_83333_UniProt.csv"
+
+# ==== Output Configuration ====
+output_dir: "../scripts/results/e_coli_homomeric_kmax/"
+
+
+# TO DO: add these parameters in kapp_builder script
+# - carbon_reaction: "EX_glc__D_e"   # Reaction ID for carbon uptake
+# - oxygen_reaction: "EX_o2_e"       # Reaction ID for oxygen uptake
+# - upper_threshold: 1.0e6           # Upper limit for kcat_app (s⁻¹)
+# - lower_threshold: 1.0e-5          # Lower limit for kcat_app (s⁻¹)
+

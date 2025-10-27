@@ -93,21 +93,18 @@ pip install "C:\Program Files\IBM\ILOG\CPLEX_Studio2211\cplex\python\3.10\x64_wi
 ### 📁 `data/`
 Main data directory organized by processing stage. Only the `/raw` and `/results` folder are kept out of the `.gitignore`.
 
-- `data/raw/` - Original, unprocessed datasets
+- `data/raw/` - Original, unprocessed datasets and genome-scale models
 
-- `data/processed/` - Processed and cleaned datasets
-  - TO DO: Add subfolders
+- `data/processed/` - Processed datasets, output from notebooks and scripts
+- `data/final/` - Final datasets
 
-- `data/final/` - Final curated datasets
 
-- `data/discarded/` - Archived datasets not used in final analysis. Contains previous versions of cleaned and processed files that didn't make it to final analysis.
-
-### 📁 `scripts/`
-Data processing and analysis scripts:
+### 📁 `src/`
+Main source code for the BactoCat pipelines:
 - **`enzyme_classifier.py`** - Script for classifying enzymes and their properties
 - TO DO: Add the rest
 
-### 📁 `experiments/`
+### 📁 `notebooks/`
 - **`ECOMICS_fluxomics.ipynb`** - Complete processing and analysis of ECOMICS fluxomics data for *E. coli* 
 - **`flux_reconciliation.ipynb`** - Pipeline for reconciling ECOMICS fluxes using a 2 level LP approach. Discarded because of poor performance with ECOMICS data.
 - **`kapp_pipeline.ipynb`** - Complete processing and analysis of *in vivo*
@@ -115,15 +112,8 @@ Data processing and analysis scripts:
 - **`load_invitro_datasets.ipynb`** - Loading and analyses of *in vitro* $k_{cat}$ for *E. coli* 
 - **`tsne_invivo_invitro.ipynb`** - Analysis of the functional space of *in vivo* and *in vitro* $k_{cat}$ for *E. coli* 
 
-### 📁 `old_experiments/`, 📁 `old_scripts/`
-Archived experimental notebooks and scripts
-
-### 📁 `results/`
-Generated results from analyses
+### 📁 `scripts/`
+Scripts to run BactoCat pipelines automated with config files 
 
 ### 📁 `misc/`
-Miscellaneous files
-
-
-### 📁 `QE/`
-Scripts used in Qualifier Examination results
+Miscellaneous and discarded files

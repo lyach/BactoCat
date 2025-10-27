@@ -46,10 +46,11 @@ venv.bak/
 Thumbs.db 
 
 # Folders
-QE
-docs
+misc/discarded/*
 data/final
-data/discarded
+notebooks/
+notebooks/results/
+scripts/results/
 
 # Cache files
 cache/
