@@ -119,7 +119,36 @@ def run_kapp_pipeline(organism: str,
                                          oxygen_uptake=oxygen_uptake)
     
     # ==== 3. Get flux variability analysis ====
-    # TO DO LATER
+    from src.kapp_builder import create_FVA_dataframe, FVA_integration
+
+    print("\nRunning Flux Variability Analysis (FVA)...")
+    
+    try:
+        fva_df = create_FVA_dataframe(
+            GEM_path=model_path,
+            carbon_uptake=carbon_uptake,
+            oxygen_uptake=oxygen_uptake,
+            mu_fraction=0.9
+        )
+        print("FVA dataframe created successfully.")
+    except Exception as e:
+        raise RuntimeError(f"Error creating FVA dataframe: {e}") 
+    
+    print("\nIntegrating FVA results with fluxomics data...")
+    try:
+        filtered_fluxomics_df, violations_df = FVA_integration(fluxomics_df, fva_df, filter=True)
+        fluxomics_df = filtered_fluxomics_df.copy()
+
+        # Save outputs for reference
+        fva_df.to_csv(output_dir / "FVA_bounds.csv", index=False)
+        filtered_fluxomics_df.to_csv(output_dir / "fluxomics_filtered.csv", index=False)
+        violations_df.to_csv(output_dir / "FVA_violations.csv", index=False)
+
+        print(f"FVA integration complete. Filtered fluxomics: {filtered_fluxomics_df.shape[0]} rows")
+        print(f"Violations detected: {violations_df.shape[0]} rows")
+    except Exception as e:
+        raise RuntimeError(f"Error during FVA integration: {e}")
+
     
     # ==== 4. Get sequence information ====
     print("\n==== 4. Loading sequence information ====")
