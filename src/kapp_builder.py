@@ -354,14 +354,14 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
             'P',           # phosphorus
             'S',           # sulfur
             # Simple cofactors
-            'C(=O)O',      # formic acid
-            'CO',          # methanol
-            'CCO',         # ethanol
-            'CC(=O)O',     # acetic acid
-            'C',           # methane
-            'CC',          # ethane
-            'CCC',         # propane
-            'N',           # ammonia (as N)
+            #'C(=O)O',      # formic acid
+            #'CO',          # methanol
+            #'CCO',         # ethanol
+            #'CC(=O)O',     # acetic acid
+            #'C',           # methane
+            #'CC',          # ethane
+            #'CCC',         # propane
+            #'N',           # ammonia (as N)
             'NN',          # hydrazine
             'C=O',         # formaldehyde
             'CC=O',        # acetaldehyde
