@@ -34,7 +34,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
-.venv310
+.venv310/
 
 # IDE specific files
 .vscode/

@@ -4,7 +4,7 @@
 # ==== Model Configuration ====
 organism: "ecoli"
 model_path: "../data/raw/GEMs/iML1515_GEM.xml"
-solver: "glpk"
+solver: "cplex"
 flux_method: "pFBA"
 
 # ==== Flux Simulation Parameters ====

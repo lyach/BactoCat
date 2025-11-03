@@ -22,6 +22,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Module imports
 from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
+# from src.gene_sequence_mapper import map_gem_genes_to_uniprot
+# from src.substrate_mapper import get_substrate_df
 from src.kapp_builder import (
     create_fluxomics_dataframe,
     create_enzyme_info_dataframe,
@@ -157,6 +159,16 @@ def run_kapp_pipeline(organism: str,
         print(f"Sequence dataframe loaded: {len(sequence_df_loaded)} rows")
     except Exception as e:
         raise ValueError(f"Sequence dataframe not found at {sequence_df}. Error: {e}")
+    
+    # if sequence_df:
+    #     try:
+    #         sequence_df = pd.read_csv(sequence_df)
+    #     except:
+    #         raise ValueError(f"Sequence dataframe not found at {sequence_df}"
+    # else:
+    #         print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
+    #         sequence_df = map_gem_genes_to_uniprot(model) 
+
         
     # ==== 5. Get substrate information ====
     print("\n==== 5. Loading substrate information ====")
@@ -165,6 +177,15 @@ def run_kapp_pipeline(organism: str,
         print(f"Substrate dataframe loaded: {len(substrate_df_loaded)} rows")
     except Exception as e:
         raise ValueError(f"Substrate dataframe not found at {substrate_df}. Error: {e}")
+    
+    # if substrate_df:
+    #     try:
+    #         substrate_df = pd.read_csv(substrate_df)
+    #     except:
+    #         raise ValueError(f"Substrate dataframe not found at {substrate_df}")
+    # else:
+    #     substrate_df = get_substrate_df(model)
+
     
     # ==== 6. Create enzyme information dataframe ====
     print("\n==== 6. Creating enzyme information dataframe ====")
