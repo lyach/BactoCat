@@ -155,19 +155,18 @@ def create_FVA_dataframe(GEM_path: str,
             FVA_upper_results[f'FVA_upper_cond{i}'] = [float('nan')] * len(rxn_ids)
             continue
         
-        mu = solution.objective_value
-        
         # Build FVA problem
-        problem = cobra_to_fva_problem(model_copy, mu)
-        problem.mu = mu_fraction
+        problem = cobra_to_fva_problem(model_copy, mu=mu_fraction)
         
         # Run FVA
         fva_results = fva_solve_faster(problem)
+        rxn_ids = [rxn.id for rxn in model_copy.reactions]
         fva_df = pd.DataFrame({
         'rxn_id': [rxn.id for rxn in model_copy.reactions],
         'FVA_lower': fva_results.lower_bound,
         'FVA_upper': fva_results.upper_bound
     }) 
+        fva_df = fva_df.set_index('rxn_id').reindex(rxn_ids).reset_index()
         
         # Store FVA lower/upper bounds
         FVA_lower_results[f'FVA_lower_cond{i}'] = fva_df['FVA_lower'].values
