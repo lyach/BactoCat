@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Optional, List, Tuple
 
 from docplex.mp.model import Model
-from docplex.mp.constants import OptimizationStatus
+from docplex.util.status import JobSolveStatus
 
 
 @dataclass
@@ -125,7 +125,7 @@ def setup_initial_fva_problem_solve(problem: FVAProblem):
     fva_model, flux_vars = build_fva_lp(problem)
 
     sol = fva_model.solve()
-    if sol is None:
+    if sol is None or sol.solve_status not in [JobSolveStatus.OPTIMAL_SOLUTION, JobSolveStatus.FEASIBLE_SOLUTION]:
         raise RuntimeError("Initial optimization infeasible or solver failed")
 
     # get objective value
@@ -171,7 +171,7 @@ def find_variable_range(model: Model, flux_vars, var_index: int, sense: str):
         model.minimize(target)
 
     sol = model.solve()
-    if sol is None:
+    if sol is None or sol.solve_status not in [JobSolveStatus.OPTIMAL_SOLUTION, JobSolveStatus.FEASIBLE_SOLUTION]:
         # return NaN on infeasible, and NaN vector
         n = len(flux_vars)
         return float("nan"), np.full(n, np.nan)

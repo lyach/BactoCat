@@ -130,7 +130,8 @@ def run_kapp_pipeline(organism: str,
             GEM_path=model_path,
             carbon_uptake=carbon_uptake,
             oxygen_uptake=oxygen_uptake,
-            mu_fraction=0.9
+            mu_fraction=0.9,
+            solver=solver
         )
         print("FVA dataframe created successfully.")
     except Exception as e:
