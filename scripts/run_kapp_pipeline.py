@@ -153,21 +153,19 @@ def run_kapp_pipeline(organism: str,
 
     
     # ==== 4. Get sequence information ====
+    from src.gene_sequence_mapper import map_organism_to_uniprot
     print("\n==== 4. Loading sequence information ====")
-    try:
-        sequence_df_loaded = pd.read_csv(sequence_df)
-        print(f"Sequence dataframe loaded: {len(sequence_df_loaded)} rows")
-    except Exception as e:
-        raise ValueError(f"Sequence dataframe not found at {sequence_df}. Error: {e}")
-    
-    # if sequence_df:
-    #     try:
-    #         sequence_df = pd.read_csv(sequence_df)
-    #     except:
-    #         raise ValueError(f"Sequence dataframe not found at {sequence_df}"
-    # else:
-    #         print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
-    #         sequence_df = map_gem_genes_to_uniprot(model) 
+    if sequence_df:
+        try:
+            sequence_df_loaded = pd.read_csv(sequence_df)
+            print(f"Sequence dataframe loaded: {len(sequence_df_loaded)} rows")
+        except Exception as e:
+            raise ValueError(f"Sequence dataframe not found at {sequence_df}. Error: {e}")
+    else: 
+        print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
+        sequence_df_loaded = map_organism_to_uniprot(organism)
+
+    sequence_df_loaded.to_csv(output_dir / "sequence_df.csv", index=False)
 
         
     # ==== 5. Get substrate information ====
