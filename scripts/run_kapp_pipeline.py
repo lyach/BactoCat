@@ -40,11 +40,12 @@ def run_kapp_pipeline(organism: str,
                       carbon_uptake: list, 
                       oxygen_uptake: list, 
                       p_total: list,
-                      substrate_df: str,
-                      sequence_df: str,
-                      paxdb_path: str,
+                      substrate_df: str = None,
+                      sequence_df: str = None,
+                      paxdb_path: str = None,
                       solver: str = "cplex",
-                      output_dir: str = None
+                      output_dir: str = None,
+                      data_dir: str = None
                       ):
     """
     Run the kapp pipeline.
@@ -85,15 +86,6 @@ def run_kapp_pipeline(organism: str,
     except Exception as e:
         raise ValueError(f"Error setting solver: {e}")
     
-    
-    # Set output directory
-    if output_dir is None:
-        output_dir = Path(__file__).parent / "results"/ f"kmax_homomeric_{organism}"
-    else:
-        output_dir = Path(output_dir)
-    
-    # Create output directory if it doesn't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
     
     # Load the model
     try:
@@ -166,7 +158,7 @@ def run_kapp_pipeline(organism: str,
         print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
         sequence_df_loaded = map_organism_to_uniprot(organism)
 
-    sequence_df_loaded.to_csv(output_dir / "sequence_df.csv", index=False)
+    sequence_df_loaded.to_csv(data_dir / "sequence_df.csv", index=False)
 
         
     # ==== 5. Get substrate information ====
@@ -276,27 +268,42 @@ def main():
         carbon_uptake = config['carbon_uptake']
         oxygen_uptake = config['oxygen_uptake']
         p_total = config['p_total']
-        substrate_df = script_dir / config['substrate_df']
-        sequence_df = script_dir / config['sequence_df']
         paxdb_path = script_dir / config['paxdb_path']
         solver = config.get('solver', 'cplex')  # Default to 'cplex' if not specified
         output_dir_str = args.output_dir or config.get('output_dir', None)
+        # Optional parameters
+        raw_substrate_df = config.get('substrate_df')
+        raw_sequence_df = config.get('sequence_df')
+        substrate_df = script_dir / raw_substrate_df if raw_substrate_df else None
+        sequence_df = script_dir / raw_sequence_df if raw_sequence_df else None
     except KeyError as e:
         print(f"Error: Missing required parameter in config file: {e}")
         sys.exit(1)
         
     # Resolve output directory
     if output_dir_str is None:
-        output_dir = Path(__file__).parent / "results"/ f"kmax_homomeric_{organism}"
+        # Default root directory is under scripts/results/
+        run_root = script_dir / f"{organism}"
     else:
-        output_dir_path = Path(output_dir_str)
-        if not output_dir_path.is_absolute():
-            output_dir = script_dir / output_dir_path
+        # Use user-provided path as the root
+        run_root_path = Path(output_dir_str)
+        if not run_root_path.is_absolute():
+            run_root = script_dir / run_root_path
         else:
-            output_dir = output_dir_path
+            run_root = run_root_path
     
-    # Create output directory if it doesn't exist
+    # Define and create the structured subdirectories
+    output_dir = run_root / "results" # Where config, logs, and final outputs go
+    data_dir = run_root / "data"     # Where intermediate data (sequence_df, FVA) goes
+
+    # Create directories if they don't exist
     output_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Output directory set to: {output_dir.relative_to(script_dir).as_posix()}")
+    print(f"Data directory set to: {data_dir.relative_to(script_dir).as_posix()}")
+
+    # Helper lambda to safely format the path for logging
+    path_to_log = lambda p: p.relative_to(script_dir).as_posix() if p else 'Auto-generated'
     
     # Display and save configuration
     config_lines = [
@@ -310,8 +317,8 @@ def main():
         f" Carbon uptake rates: {carbon_uptake}",
         f" Oxygen uptake rates: {oxygen_uptake}",
         f" P_total values: {p_total}",
-        f" Substrate data: {substrate_df.relative_to(script_dir).as_posix()}",
-        f" Sequence data: {sequence_df.relative_to(script_dir).as_posix()}",
+        f" Substrate data: {path_to_log(substrate_df)}",
+        f" Sequence data: {path_to_log(sequence_df)}",
         f" PaxDB data: {paxdb_path.relative_to(script_dir).as_posix()}",
         f" Output directory: {output_dir.relative_to(script_dir).as_posix()}",
         f"{'='*60}\n"
@@ -343,7 +350,8 @@ def main():
                 sequence_df=sequence_df,
                 paxdb_path=paxdb_path,
                 solver=solver,
-                output_dir=output_dir
+                output_dir=output_dir,
+                data_dir=data_dir
             )
             
             print("\nPipeline execution completed successfully!")

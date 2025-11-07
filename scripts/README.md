@@ -96,12 +96,14 @@ Large GEMs and pFBA most likely require full license solvers (CPLEX or Gurobi). 
 
 ### Multiple Configurations
 
-You can create multiple config files for different analyses:
+You can create multiple config files for different analyses.
+
+Navigate to the main repo directory, and run:
 
 ```bash
-python run_kapp_pipeline.py ecoli_homomeric.yaml
-python run_kapp_pipeline.py pputida_homomeric.yaml
-python run_kapp_pipeline.py bsubtilis_homomeric.yaml
+python scripts\run_kapp_pipeline.py configs\scripts\ecoli_homomeric.yaml
+python scripts\run_kapp_pipeline.py configs\scripts\pputida_homomeric.yaml
+python scripts\run_kapp_pipeline.py configs\scripts\bsubtilis_homomeric.yaml
 ```
 
 ### Programmatic Usage
