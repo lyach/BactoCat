@@ -158,7 +158,7 @@ def run_kapp_pipeline(organism: str,
         print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
         sequence_df_loaded = map_organism_to_uniprot(organism)
 
-    sequence_df_loaded.to_csv(output_dir / "sequence_df.csv", index=False)
+    sequence_df_loaded.to_csv(data_dir / "sequence_df.csv", index=False)
 
         
     # ==== 5. Get substrate information ====
