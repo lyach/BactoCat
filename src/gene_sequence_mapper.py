@@ -19,6 +19,7 @@ import pandas as pd
 import os
 from bioservices import UniProt
 from mygene import MyGeneInfo
+from tqdm import tqdm
 
 # Dictionary mapping lowercase organism names to representative GEM IDs
 DEFAULT_GEM_IDS = {
@@ -114,19 +115,9 @@ def map_organism_to_uniprot(organism: str) -> pd.DataFrame:
     # Map gene IDs to UniProt IDs
     mapping_data = []
     
-    # Track progress
-    total_genes = len(all_gene_ids)
-    processed = 0
-    
-    print(f"Starting mapping of {total_genes} gene IDs to UniProt IDs...")
-    
     # --- 4. Loop Through Genes and Query UniProt ---
     
-    for gene_id in all_gene_ids:
-        processed += 1
-        if processed % 50 == 0 or processed == total_genes:
-            print(f"Progress: {processed}/{total_genes} genes processed")
-        
+    for gene_id in tqdm(all_gene_ids, desc="Mapping gene IDs to UniProt"):
         uniprot_id = None
         ec_number = None
         sequence = None
@@ -238,17 +229,7 @@ def map_gem_genes_to_uniprot(model_id, organism):
     # Map gene IDs to UniProt IDs
     mapping_data = []
     
-    # Track progress
-    total_genes = len(all_gene_ids)
-    processed = 0
-    
-    print(f"Starting mapping of {total_genes} gene IDs to UniProt IDs...")
-    
-    for gene_id in all_gene_ids:
-        processed += 1
-        if processed % 50 == 0 or processed == total_genes:
-            print(f"Progress: {processed}/{total_genes} genes processed")
-        
+    for gene_id in tqdm(all_gene_ids, desc="Mapping gene IDs to UniProt"):
         uniprot_id = None
         ec_number = None
         sequence = None
@@ -398,15 +379,9 @@ def map_ENSP_to_UniProt(ENSP_df, taxon_ID="9606"):
     
     # Get unique ENSPs
     all_protein_ids = ENSP_df["ENSP"].dropna().unique()
-    total_proteins = len(all_protein_ids)
     mapping_data = []
 
-    print(f"Starting mapping of {total_proteins} ENSP IDs to UniProt entries...")
-
-    for idx, protein_id in enumerate(all_protein_ids, 1):
-        if idx % 50 == 0 or idx == total_proteins:
-            print(f"Progress: {idx}/{total_proteins} proteins processed")
-
+    for protein_id in tqdm(all_protein_ids, desc="Mapping ENSP IDs to UniProt"):
         uniprot_id = None
         ec_number = None
         sequence = None
@@ -497,15 +472,9 @@ def map_PaxDB_to_UniProt(PaxDB_df, taxon_ID="9606"):
     
     # Get unique PaxDB IDs
     all_protein_ids = PaxDB_df["PaxDB_ID"].dropna().unique()
-    total_proteins = len(all_protein_ids)
     mapping_data = []
 
-    print(f"Starting mapping of {total_proteins} PaxDB IDs to UniProt entries...")
-
-    for idx, protein_id in enumerate(all_protein_ids, 1):
-        if idx % 50 == 0 or idx == total_proteins:
-            print(f"Progress: {idx}/{total_proteins} proteins processed")
-
+    for protein_id in tqdm(all_protein_ids, desc="Mapping PaxDB IDs to UniProt"):
         uniprot_id = None
         ec_number = None
         sequence = None

@@ -96,11 +96,12 @@ def run_kapp_pipeline(organism: str,
         raise ValueError(f"Model not found at {model_path}. Error: {e}")
     
     # ==== 1. Create GEM enzymes dataframe ====
+    print("\n==== STEP 1. Create GEM enzymes dataframe ====")
     df_enzymes = create_gpr_dataframe(model)
     
     # Prints
     stats = analyze_model_gprs(model)
-    print("\nModel Stats:")
+    print("Model Stats:")
     print(f"Total reactions: {stats['total_reactions']}")
     print(f"Reactions with GPR: {stats['reactions_with_gpr']}")
     print(f"Total genes: {stats['total_genes']}")
@@ -108,6 +109,7 @@ def run_kapp_pipeline(organism: str,
     df_enzymes.head()
     
     # ==== 2. Get fluxomics simulations ====
+    print(f"\n==== STEP 2. Run {flux_method} fluxomics simulations ====")
     fluxomics_df = create_fluxomics_dataframe(flux_method=flux_method, GEM=model, 
                                          carbon_uptake=carbon_uptake, 
                                          oxygen_uptake=oxygen_uptake)
@@ -115,7 +117,7 @@ def run_kapp_pipeline(organism: str,
     # ==== 3. Get flux variability analysis ====
     from src.kapp_builder import create_FVA_dataframe, FVA_integration
 
-    print("\nRunning Flux Variability Analysis (FVA)...")
+    print("\n==== STEP 3. Run flux variability analysis ====")
     
     try:
         fva_df = create_FVA_dataframe(
@@ -147,7 +149,7 @@ def run_kapp_pipeline(organism: str,
     
     # ==== 4. Get sequence information ====
     from src.gene_sequence_mapper import map_organism_to_uniprot
-    print("\n==== 4. Loading sequence information ====")
+    print("\n==== STEP 4. Load sequence information ====")
     if sequence_df:
         try:
             sequence_df_loaded = pd.read_csv(sequence_df)
@@ -162,7 +164,7 @@ def run_kapp_pipeline(organism: str,
 
         
     # ==== 5. Get substrate information ====
-    print("\n==== 5. Loading substrate information ====")
+    print("\n==== STEP 5. Load substrate information ====")
     try:
         substrate_df_loaded = pd.read_csv(substrate_df)
         print(f"Substrate dataframe loaded: {len(substrate_df_loaded)} rows")
@@ -179,30 +181,31 @@ def run_kapp_pipeline(organism: str,
 
     
     # ==== 6. Create enzyme information dataframe ====
-    print("\n==== 6. Creating enzyme information dataframe ====")
+    print("\n==== STEP 6. Create enzyme information dataframe ====")
     enzymes_info_dfs = create_enzyme_info_dataframe(df_enzymes, fluxomics_df, substrate_df_loaded, sequence_df_loaded)
     
     # === 7. Map proteomics information ====
-    print("\n==== 7. Mapping proteomics information ====")
+    print("\n==== STEP 7. Map proteomics information ====")
     enzyme_protein_info_dfs = process_enzyme_protein_mapping(enzymes_info_dfs, paxdb_path, p_total=p_total)
     
     # ==== 8. Calculate kapp for homomeric enzymes ====
-    print("\n==== 8. Calculating kapp for homomeric enzymes ====")
+    print("\n==== STEP 8. Calculate kapp for homomeric enzymes ====")
     kapp_dfs = calculate_kapp_homomeric(enzyme_protein_info_dfs)
     
     # ==== 9. Filter values above physical threshold ====
+    print("\n==== STEP 9. Filter values above physical threshold ====")
     kapp_dfs_filtered = evaluate_kapp_homomeric(kapp_dfs)
     
     # ==== 10. Get kmax for homomeric enzymes ====
-    print("\n==== 10. Getting kmax for homomeric enzymes ====")
+    print("\n==== STEP 10. Get kmax for homomeric enzymes ====")
     kmax_dfs = get_kmax_homomeric(kapp_dfs_filtered)
     
     # ==== 11. Get eta values ====
-    print("\n==== 11. Calculating eta values ====")
+    print("\n==== STEP 11. Calculate eta values ====")
     kapp_dfs_eta, kmax_dfs_eta_var = get_eta(kapp_dfs_filtered, kmax_dfs)
     
     # ==== 12. Save the results ====
-    print("\n==== 12. Saving results ====")
+    print("\n==== STEP 12. Save results ====")
     output_file = output_dir / f"iml1515_homomeric_kmax_{flux_method}_variability.csv"
     kmax_dfs_eta_var.to_csv(output_file, index=False)
     print(f"Results saved to: {output_file}")
@@ -227,7 +230,10 @@ def main():
         epilog="""
         Example usage:
         python run_kapp_pipeline.py config.yaml
-        python run_kapp_pipeline.py config.yaml --output-dir ./custom_results
+        python run_kapp_pipeline.py config.yaml --output-dir my_custom_run
+        
+        Note: Output will be saved to scripts/runs/{run_name}/
+        with subdirectories /data and /runs
         """
     )
     
@@ -241,7 +247,7 @@ def main():
         '--output-dir',
         type=str,
         default=None,
-        help='Override output directory from config file'
+        help='Override run name (subfolder under scripts/runs/) from config file'
     )
     
     args = parser.parse_args()
@@ -270,7 +276,17 @@ def main():
         p_total = config['p_total']
         paxdb_path = script_dir / config['paxdb_path']
         solver = config.get('solver', 'cplex')  # Default to 'cplex' if not specified
-        output_dir_str = args.output_dir or config.get('output_dir', None)
+        
+        # Get run name for output directory structure
+        if args.output_dir:
+            run_name = args.output_dir
+        elif 'run_name' in config:
+            run_name = config['run_name']
+        elif 'output_dir' in config:
+            run_name = Path(config['output_dir']).name
+        else:
+            run_name = f"{organism}_results"
+            
         # Optional parameters
         raw_substrate_df = config.get('substrate_df')
         raw_sequence_df = config.get('sequence_df')
@@ -280,21 +296,14 @@ def main():
         print(f"Error: Missing required parameter in config file: {e}")
         sys.exit(1)
         
-    # Resolve output directory
-    if output_dir_str is None:
-        # Default root directory is under scripts/results/
-        run_root = script_dir / f"{organism}"
-    else:
-        # Use user-provided path as the root
-        run_root_path = Path(output_dir_str)
-        if not run_root_path.is_absolute():
-            run_root = script_dir / run_root_path
-        else:
-            run_root = run_root_path
+    # Resolve output directory structure
+    results_base = script_dir / "runs"
+    # Run-specific directory under results/
+    run_root = results_base / run_name
     
     # Define and create the structured subdirectories
-    output_dir = run_root / "results" # Where config, logs, and final outputs go
-    data_dir = run_root / "data"     # Where intermediate data (sequence_df, FVA) goes
+    output_dir = run_root / "results"  # Where config, logs, and final outputs go
+    data_dir = run_root / "data"       # Where intermediate data (sequence_df, FVA) goes
 
     # Create directories if they don't exist
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -310,6 +319,7 @@ def main():
         f"\n{'='*60}",
         "KAPP PIPELINE CONFIGURATION",
         f"{'='*60}",
+        f" Run name: {run_name}",
         f" Organism: {organism}",
         f" Model: {model_path.relative_to(script_dir).as_posix()}",
         f" Flux method: {flux_method}",
@@ -320,7 +330,8 @@ def main():
         f" Substrate data: {path_to_log(substrate_df)}",
         f" Sequence data: {path_to_log(sequence_df)}",
         f" PaxDB data: {paxdb_path.relative_to(script_dir).as_posix()}",
-        f" Output directory: {output_dir.relative_to(script_dir).as_posix()}",
+        f" Data directory: {data_dir.relative_to(script_dir).as_posix()}",
+        f" Results directory: {output_dir.relative_to(script_dir).as_posix()}",
         f"{'='*60}\n"
     ]
     config_text = "\n".join(config_lines)

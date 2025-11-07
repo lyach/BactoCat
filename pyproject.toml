@@ -22,6 +22,9 @@ dependencies = [
     "fair-esm",
     "torch",
     "docplex",
+    "bioservices",
+    "mygene",
+    "tqdm",
 ]
 
 # --- uv ---

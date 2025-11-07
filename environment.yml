@@ -18,6 +18,9 @@ dependencies:
   - fastparquet
   - pip
   - biopython
+  - bioservices
+  - tqdm
   - pip:
       - fair-esm
       - torch
+      - mygene

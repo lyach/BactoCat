@@ -17,10 +17,11 @@ paxdb_path: "../data/raw/PaxDb/511145_ecoli/511145-WHOLE_ORGANISM-integrated.txt
 
 # ==== Input Data Files ====
 substrate_df: "../data/processed/kinGEMs_iML1515/iML1515_substrates.csv"
-sequence_df: "../data/processed/UniProt/iML1515_E coli_83333_UniProt.csv"
+#sequence_df: "../data/processed/UniProt/iML1515_E coli_83333_UniProt.csv"
 
 # ==== Output Configuration ====
-output_dir: "../scripts/e_coli_homomeric_kmax/"
+# Name of the subfolder under scripts/runs/ where outputs will be saved
+run_name: "e_coli_homomeric_kmax"
 
 
 # TO DO: add these parameters in kapp_builder script

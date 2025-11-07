@@ -51,7 +51,7 @@ misc/discarded/*
 data/final
 notebooks/
 notebooks/results/
-scripts/results/
+scripts/runs/
 
 # Cache files
 cache/
