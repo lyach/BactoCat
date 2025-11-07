@@ -17,7 +17,7 @@ from itertools import product
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from cobra.io import read_sbml_model
 from src.FVA_analysis.utils import cobra_to_fva_problem
-from src.FVA_analysis.fvfa import fva_solve_faster
+
 
 def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model, 
                               carbon_uptake: list, oxygen_uptake: list):
@@ -97,7 +97,8 @@ def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model,
 def create_FVA_dataframe(GEM_path: str, 
                                         carbon_uptake: list, 
                                         oxygen_uptake: list,
-                                        mu_fraction: float = 0.9):
+                                        mu_fraction: float = 0.9,
+                                        solver: str = 'cplex'):
     """
     Run FVA for all combinations of carbon and oxygen uptake rates, 
     matching the structure of create_fluxomics_dataframe().
@@ -120,6 +121,14 @@ def create_FVA_dataframe(GEM_path: str,
         ['rxn_id', 'FVA_lower_cond1', 'FVA_upper_cond1', ..., 'FVA_lower_condN', 'FVA_upper_condN']
     """
     
+    # Conditionally import the correct FVA solver
+    if solver.lower() == 'cplex':
+        from src.FVA_analysis.fvfa_cplex import fva_solve_faster
+    elif solver.lower() == 'gurobi':
+        from src.FVA_analysis.fvfa import fva_solve_faster
+    else:
+        raise ValueError(f"Solver '{solver}' is not supported for FVA. Please use 'cplex' or 'gurobi'.")
+
     # Create all combinations of carbon and oxygen uptake rates
     uptake_combinations = list(product(carbon_uptake, oxygen_uptake))
     

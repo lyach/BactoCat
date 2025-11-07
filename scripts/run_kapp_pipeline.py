@@ -122,7 +122,8 @@ def run_kapp_pipeline(organism: str,
             GEM_path=model_path,
             carbon_uptake=carbon_uptake,
             oxygen_uptake=oxygen_uptake,
-            mu_fraction=0.9
+            mu_fraction=0.9,
+            solver=solver
         )
         print("FVA dataframe created successfully.")
     except Exception as e:
@@ -157,7 +158,7 @@ def run_kapp_pipeline(organism: str,
         print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
         sequence_df_loaded = map_organism_to_uniprot(organism)
 
-    sequence_df_loaded.to_csv(data_dir/ "sequence_df.csv", index=False)
+    sequence_df_loaded.to_csv(output_dir / "sequence_df.csv", index=False)
 
         
     # ==== 5. Get substrate information ====
