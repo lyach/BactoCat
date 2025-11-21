@@ -31,14 +31,7 @@ from src.kapp_builder import (
     calculate_kapp_homomeric,
     evaluate_kapp_homomeric,
     get_kmax_homomeric,
-    get_eta,
-    identify_heteromeric_enzymes,
-    map_heteromeric_subunits_to_proteomics,
-    calculate_specific_activity_heteromeric,
-    evaluate_specific_activity_heteromeric,
-    get_SA_max_heteromeric,
-    get_eta_heteromeric,
-    combine_homomeric_heteromeric_results
+    get_eta
 )
 
 def run_kapp_pipeline(organism: str,
@@ -52,8 +45,7 @@ def run_kapp_pipeline(organism: str,
                       paxdb_path: str = None,
                       solver: str = "cplex",
                       output_dir: str = None,
-                      data_dir: str = None,
-                      include_heteromeric: bool = True
+                      data_dir: str = None
                       ):
     """
     Run the kapp pipeline.
@@ -81,16 +73,11 @@ def run_kapp_pipeline(organism: str,
             Solver for the flux simulations. Default is 'cplex'.
         output_dir: str, optional
             Directory to save output files. Default is scripts/results/
-        include_heteromeric: bool, optional
-            Whether to include heteromeric enzyme analysis. Default is True.
     
     Returns:
-        tuple: (kapp_dfs_eta, kmax_dfs_eta_var, SA_dfs_eta, SA_max_dfs_var, combined_results)
-            - kapp_dfs_eta: dict of kapp dataframes with eta values (homomeric)
-            - kmax_dfs_eta_var: DataFrame with kmax values and variance metrics (homomeric)
-            - SA_dfs_eta: dict of specific activity dataframes with eta values (heteromeric)
-            - SA_max_dfs_var: DataFrame with SA_max values and variance metrics (heteromeric)
-            - combined_results: DataFrame combining both homomeric and heteromeric results
+        tuple: (kapp_dfs_eta, kmax_dfs_eta_var)
+            - kapp_dfs_eta: dict of kapp dataframes with eta values
+            - kmax_dfs_eta_var: DataFrame with kmax values and variance metrics
     """
     # Set solver
     try:
@@ -192,8 +179,8 @@ def run_kapp_pipeline(organism: str,
     # else:
     #     substrate_df = get_substrate_df(model)
 
-
-     # ==== 6. Create enzyme information dataframe ====
+    
+    # ==== 6. Create enzyme information dataframe ====
     print("\n==== STEP 6. Create enzyme information dataframe ====")
     enzymes_info_dfs = create_enzyme_info_dataframe(df_enzymes, fluxomics_df, substrate_df_loaded, sequence_df_loaded)
     
@@ -201,83 +188,33 @@ def run_kapp_pipeline(organism: str,
     print("\n==== STEP 7. Map proteomics information ====")
     enzyme_protein_info_dfs = process_enzyme_protein_mapping(enzymes_info_dfs, paxdb_path, p_total=p_total)
     
-    # ==== 8a. Calculate kapp for homomeric enzymes ====
-    print("\n==== STEP 8a. Calculate kapp for homomeric enzymes ====")
+    # ==== 8. Calculate kapp for homomeric enzymes ====
+    print("\n==== STEP 8. Calculate kapp for homomeric enzymes ====")
     kapp_dfs = calculate_kapp_homomeric(enzyme_protein_info_dfs)
     
-    # ==== 9a. Filter values above physical threshold ====
-    print("\n==== STEP 9a. Filter values above physical threshold (homomeric) ====")
+    # ==== 9. Filter values above physical threshold ====
+    print("\n==== STEP 9. Filter values above physical threshold ====")
     kapp_dfs_filtered = evaluate_kapp_homomeric(kapp_dfs)
     
-    # ==== 10a. Get kmax for homomeric enzymes ====
-    print("\n==== STEP 10a. Get kmax for homomeric enzymes ====")
+    # ==== 10. Get kmax for homomeric enzymes ====
+    print("\n==== STEP 10. Get kmax for homomeric enzymes ====")
     kmax_dfs = get_kmax_homomeric(kapp_dfs_filtered)
     
-    # ==== 11a. Get eta values ====
-    print("\n==== STEP 11a. Calculate eta values (homomeric) ====")
+    # ==== 11. Get eta values ====
+    print("\n==== STEP 11. Calculate eta values ====")
     kapp_dfs_eta, kmax_dfs_eta_var = get_eta(kapp_dfs_filtered, kmax_dfs)
     
-    # ==== 12a. Save homomeric results ====
-    print("\n==== STEP 12a. Save homomeric results ====")
-    homomeric_output_file = output_dir / f"{organism}_homomeric_kmax_{flux_method}_variability.csv"
-    kmax_dfs_eta_var.to_csv(homomeric_output_file, index=False)
-    print(f"Homomeric results saved to: {homomeric_output_file}")
-    
-    # ==== 8b. Calculate specific activity for heteromeric complexes ====
-    
-    # Initialize heteromeric variables
-    SA_dfs_eta = None
-    SA_max_dfs_var = None
-    combined_results = None
-    
-    if include_heteromeric:
-        print("\n" + "="*60)
-        print("HETEROMERIC ENZYME ANALYSIS")
-        print("="*60)
-        
-        print("\n==== STEP 8b.1. Identify heteromeric enzymes ====")
-        heteromeric_enzyme_dfs, heteromeric_metadata = identify_heteromeric_enzymes(enzymes_info_dfs)
-        
-        print("\n==== STEP 8b.2. Map heteromeric subunits to proteomics ====")
-        heteromeric_protein_info_dfs = map_heteromeric_subunits_to_proteomics(
-            heteromeric_enzyme_dfs, 
-            paxdb_path, 
-            p_total
-        )
-        
-        print("\n==== STEP 8b.3. Calculate specific activity for heteromeric enzymes ====")
-        SA_dfs = calculate_specific_activity_heteromeric(heteromeric_protein_info_dfs)
-        
-        print("\n==== STEP 9b. Filter specific activity values ====")
-        SA_dfs_filtered = evaluate_specific_activity_heteromeric(SA_dfs)
-        
-        print("\n==== STEP 10b. Get SA_max for heteromeric enzymes ====")
-        SA_max_dfs = get_SA_max_heteromeric(SA_dfs_filtered)
-        
-        print("\n==== STEP 11b. Calculate eta values (heteromeric) ====")
-        SA_dfs_eta, SA_max_dfs_var = get_eta_heteromeric(SA_dfs_filtered, SA_max_dfs)
-        
-        print("\n==== STEP 12b. Save heteromeric results ====")
-        heteromeric_output_file = output_dir / f"{organism}_heteromeric_SAmax_{flux_method}_variability.csv"
-        SA_max_dfs_var.to_csv(heteromeric_output_file, index=False)
-        print(f"Heteromeric results saved to: {heteromeric_output_file}")
-        
-        # ==== 13. Combine results ====
-        print("\n==== STEP 13. Combine homomeric and heteromeric results ====")
-        combined_results = combine_homomeric_heteromeric_results(
-            kmax_dfs_eta_var, 
-            SA_max_dfs_var
-        )
-        
-        combined_output_file = output_dir / f"{organism}_combined_kmax_SAmax_{flux_method}_variability.csv"
-        combined_results.to_csv(combined_output_file, index=False)
-        print(f"Combined results saved to: {combined_output_file}")
+    # ==== 12. Save the results ====
+    print("\n==== STEP 12. Save results ====")
+    output_file = output_dir / f"iml1515_homomeric_kmax_{flux_method}_variability.csv"
+    kmax_dfs_eta_var.to_csv(output_file, index=False)
+    print(f"Results saved to: {output_file}")
     
     print(f"\n{'='*60}")
     print("Pipeline completed!")
     print(f"{'='*60}")
     
-    return kapp_dfs_eta, kmax_dfs_eta_var, SA_dfs_eta, SA_max_dfs_var, combined_results
+    return kapp_dfs_eta, kmax_dfs_eta_var
 
 
 def main():
@@ -313,12 +250,6 @@ def main():
         help='Override run name (subfolder under scripts/runs/) from config file'
     )
     
-    parser.add_argument(
-        '--no-heteromeric',
-        action='store_true',
-        help='Skip heteromeric enzyme analysis'
-    )
-    
     args = parser.parse_args()
     
     # Load configuration file
@@ -344,8 +275,7 @@ def main():
         oxygen_uptake = config['oxygen_uptake']
         p_total = config['p_total']
         paxdb_path = script_dir / config['paxdb_path']
-        solver = config.get('solver', 'cplex')
-        include_heteromeric = not args.no_heteromeric and config.get('include_heteromeric', True)
+        solver = config.get('solver', 'cplex')  # Default to 'cplex' if not specified
         
         # Get run name for output directory structure
         if args.output_dir:
@@ -368,11 +298,12 @@ def main():
         
     # Resolve output directory structure
     results_base = script_dir / "runs"
+    # Run-specific directory under results/
     run_root = results_base / run_name
     
     # Define and create the structured subdirectories
-    output_dir = run_root / "results"
-    data_dir = run_root / "data"
+    output_dir = run_root / "results"  # Where config, logs, and final outputs go
+    data_dir = run_root / "data"       # Where intermediate data (sequence_df, FVA) goes
 
     # Create directories if they don't exist
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -399,7 +330,6 @@ def main():
         f" Substrate data: {path_to_log(substrate_df)}",
         f" Sequence data: {path_to_log(sequence_df)}",
         f" PaxDB data: {paxdb_path.relative_to(script_dir).as_posix()}",
-        f" Include heteromeric: {include_heteromeric}",
         f" Data directory: {data_dir.relative_to(script_dir).as_posix()}",
         f" Results directory: {output_dir.relative_to(script_dir).as_posix()}",
         f"{'='*60}\n"
@@ -407,7 +337,7 @@ def main():
     config_text = "\n".join(config_lines)
     print(config_text)
     
-    config_filepath = output_dir / f"kmax_pipeline_{organism}.txt"
+    config_filepath = output_dir / f"kmax_homomeric_{organism}.txt"
     with open(config_filepath, 'w', encoding='utf-8') as f:
         f.write(config_text)
     
@@ -420,7 +350,7 @@ def main():
             print(f"\nConfiguration saved to {config_filepath.relative_to(script_dir).as_posix()}")
 
             # Run the pipeline
-            results = run_kapp_pipeline(
+            kapp_results, kmax_results = run_kapp_pipeline(
                 organism=organism,
                 model_path=model_path,
                 flux_method=flux_method,
@@ -432,8 +362,7 @@ def main():
                 paxdb_path=paxdb_path,
                 solver=solver,
                 output_dir=output_dir,
-                data_dir=data_dir,
-                include_heteromeric=include_heteromeric
+                data_dir=data_dir
             )
             
             print("\nPipeline execution completed successfully!")
