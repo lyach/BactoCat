@@ -172,38 +172,83 @@ def _print_summary_statistics(kcat1_raw: pd.Series, log_kcat1: pd.Series,
     print("="*80)
 
 
-def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series, ax: plt.Axes,
-                       label1: str, label2: str) -> None:
-    """Plot log-histogram with KDE overlay."""
+def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series = None, ax: plt.Axes = None,
+                       label1: str = "Dataset", label2: str = "Dataset 2") -> None:
+    """
+    Plot log-histogram with KDE overlay for one or two datasets.
     
-    # Determine appropriate number of bins
-    n_bins = max(20, min(50, int(np.sqrt(len(log_kcat1) + len(log_kcat2)))))
+    Parameters
+    ----------
+    log_kcat1 : pd.Series
+        First dataset (log-transformed kcat values)
+    log_kcat2 : pd.Series, optional
+        Second dataset for comparison. If None, only plots log_kcat1
+    ax : plt.Axes, optional
+        Matplotlib axes to plot on. If None, creates new figure
+    label1 : str, default "Dataset"
+        Label for first dataset
+    label2 : str, default "Dataset 2"
+        Label for second dataset (only used if log_kcat2 is provided)
+    """
     
-    # Plot histograms
-    ax.hist(log_kcat1, bins=n_bins, alpha=0.6, density=True, 
-            label=f'{label1} (n={len(log_kcat1):,})', color='skyblue', edgecolor='black', linewidth=0.5)
-    ax.hist(log_kcat2, bins=n_bins, alpha=0.6, density=True,
-            label=f'{label2} (n={len(log_kcat2):,})', color='lightcoral', edgecolor='black', linewidth=0.5)
+    # Create figure if axes not provided
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 6))
     
-    # Add KDE overlays
+    # Determine if plotting one or two datasets
+    dual_mode = log_kcat2 is not None
+    
+    # Number of bins
+    if dual_mode:
+        n_bins = max(20, min(50, int(np.sqrt(len(log_kcat1) + len(log_kcat2)))))
+    else:
+        n_bins = max(20, min(50, int(np.sqrt(len(log_kcat1)))))
+    
+    # Plot histogram(s)
+    if dual_mode:
+        ax.hist(log_kcat1, bins=n_bins, alpha=0.6, density=True, 
+                label=f'{label1} (n={len(log_kcat1):,})', color='skyblue', edgecolor='black', linewidth=0.5)
+        ax.hist(log_kcat2, bins=n_bins, alpha=0.6, density=True,
+                label=f'{label2} (n={len(log_kcat2):,})', color='lightcoral', edgecolor='black', linewidth=0.5)
+    else:
+        ax.hist(log_kcat1, bins=n_bins, alpha=0.7, density=True, 
+                label=f'{label1} (n={len(log_kcat1):,})', color='skyblue', edgecolor='black', linewidth=0.5)
+    
+    # Add KDE overlay
     try:
         kde1 = stats.gaussian_kde(log_kcat1.dropna())
-        kde2 = stats.gaussian_kde(log_kcat2.dropna())
+        x_min = log_kcat1.min()
+        x_max = log_kcat1.max()
         
-        x_range = np.linspace(min(log_kcat1.min(), log_kcat2.min()),
-                             max(log_kcat1.max(), log_kcat2.max()), 200)
-        
-        ax.plot(x_range, kde1(x_range), color='blue', linewidth=2, linestyle='--')
-        ax.plot(x_range, kde2(x_range), color='red', linewidth=2, linestyle='--')
+        if dual_mode:
+            kde2 = stats.gaussian_kde(log_kcat2.dropna())
+            x_min = min(x_min, log_kcat2.min())
+            x_max = max(x_max, log_kcat2.max())
+            
+            x_range = np.linspace(x_min, x_max, 200)
+            ax.plot(x_range, kde1(x_range), color='blue', linewidth=2, linestyle='--')
+            ax.plot(x_range, kde2(x_range), color='red', linewidth=2, linestyle='--')
+        else:
+            x_range = np.linspace(x_min, x_max, 200)
+            ax.plot(x_range, kde1(x_range), color='blue', linewidth=2, linestyle='--')
         
     except Exception as e:
         print(f"Warning: Could not generate KDE overlay: {e}")
     
     ax.set_xlabel('log₁₀(kcat) [s⁻¹]', fontweight="bold")
     ax.set_ylabel('Density', fontweight="bold")
-    ax.set_title('Distribution Comparison\n(Histogram + KDE)')
+    
+    if dual_mode:
+        ax.set_title('Distribution Comparison\n(Histogram + KDE)')
+    else:
+        ax.set_title('kcat Distribution\n(Histogram + KDE)')
+    
     ax.legend()
     ax.grid(True, alpha=0.3)
+    
+    if ax is None:
+        plt.tight_layout()
+        plt.show()
 
 
 def _plot_ecdf(log_kcat1: pd.Series, log_kcat2: pd.Series, ax: plt.Axes,

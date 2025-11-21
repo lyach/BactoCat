@@ -2,22 +2,23 @@
 Module Description: kapp_builder.py
 
 Purpose: 
-Script for building the kapp dataframe.
+Script for building the kapp dataframe for homomeric and heteromeric enzymes.
 
 Overview: 
 This module provides functions to:
-
-
+- Calculate apparent kcat (kapp) for homomeric enzymes
+- Calculate specific activity (SA_app) for heteromeric enzyme complexes
 """
 
 import cobra
 import pandas as pd
+import numpy as np
 from cobra import flux_analysis
 from itertools import product
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from cobra.io import read_sbml_model
 from src.FVA_analysis.utils import cobra_to_fva_problem
-
+import json
 
 def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model, 
                               carbon_uptake: list, oxygen_uptake: list):
@@ -946,3 +947,899 @@ def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
     
     print("\nCompleted eta calculation for all conditions")
     return kapp_results_with_eta, kmax_with_variance
+
+
+def identify_heteromeric_enzymes(enzyme_info_dfs: dict):
+    """
+    Filter and prepare heteromeric enzyme data from the enzyme_info_dfs.
+    
+    Parameters:
+        enzyme_info_dfs: dict
+            Dictionary with condition names as keys and enzyme dataframes as values
+    
+    Returns:
+        tuple: (heteromeric_enzyme_dfs, heteromeric_metadata)
+            - heteromeric_enzyme_dfs: dict with same structure containing only heteromeric enzymes
+            - heteromeric_metadata: dict with information about each complex
+    """
+    
+    print("Identifying heteromeric enzyme complexes...")
+    
+    # Initialize output dictionaries
+    heteromeric_enzyme_dfs = {}
+    heteromeric_metadata = {}
+    
+    # Process each condition
+    for condition_name, df in enzyme_info_dfs.items():
+        print(f"\nProcessing condition: {condition_name}")
+        
+        # Filter for heteromeric complexes (gpr_class == 'and_only')
+        # Only keep heteromeric complexes that are connected by just AND logic
+        # OR and AND cases will be handled separately
+        heteromeric_df = df[df['gpr_class'] == 'and_only'].copy()
+        
+        print(f"  Found {len(heteromeric_df)} heteromeric enzyme entries")
+        
+        if len(heteromeric_df) == 0:
+            heteromeric_enzyme_dfs[condition_name] = heteromeric_df
+            continue
+        
+        # Group by reaction to identify complexes
+        for rxn_id, group in heteromeric_df.groupby('rxn'):
+            complex_id = f"{rxn_id}"
+            
+            # Get all genes (subunits) for this complex
+            genes = group['gene'].unique().tolist()
+            
+            # Check if all subunits have sequence data
+            missing_sequences = group['sequence'].isna().sum()
+            all_sequences_available = (missing_sequences == 0)
+            
+            # Store metadata
+            if complex_id not in heteromeric_metadata:
+                heteromeric_metadata[complex_id] = {
+                    'complex_id': complex_id,
+                    'reaction_id': rxn_id,
+                    'genes': genes,
+                    'n_subunits': len(genes),
+                    'all_sequences_available': all_sequences_available,
+                    'missing_sequences_count': missing_sequences
+                }
+        
+        # Store the heteromeric dataframe for this condition
+        heteromeric_enzyme_dfs[condition_name] = heteromeric_df
+        
+        print(f"  Identified {len(heteromeric_df['rxn'].unique())} unique heteromeric complexes")
+        print(f"  Total subunit entries: {len(heteromeric_df)}")
+    
+    # Print summary of metadata
+    print("\n" + "="*60)
+    print("HETEROMERIC COMPLEXES SUMMARY")
+    print("="*60)
+    print(f"Total unique complexes identified: {len(heteromeric_metadata)}")
+    
+    complexes_with_all_sequences = sum(1 for v in heteromeric_metadata.values() if v['all_sequences_available'])
+    print(f"Complexes with all sequences available: {complexes_with_all_sequences}")
+    print(f"Complexes with missing sequences: {len(heteromeric_metadata) - complexes_with_all_sequences}")
+    
+    return heteromeric_enzyme_dfs, heteromeric_metadata
+
+
+def map_heteromeric_subunits_to_proteomics(heteromeric_enzyme_dfs: dict, 
+                                           paxdb_path: str, 
+                                           p_total: list):
+    """
+    Map all subunits of heteromeric complexes to proteomics data and aggregate.
+    
+    Parameters:
+        heteromeric_enzyme_dfs: dict
+            Dictionary with condition names as keys and heteromeric enzyme dataframes as values
+        paxdb_path: str
+            Path to PaxDB TSV file
+        p_total: list
+            List of total protein content values (g/gDCW) to test
+    
+    Returns:
+        heteromeric_protein_info_dfs: dict
+            Nested dictionary {condition: {p_total: dataframe}}
+            Each row represents a complete enzyme complex with aggregated subunit data
+    """
+    
+    # Load PaxDB data
+    print(f"Loading PaxDB data from: {paxdb_path}")
+    paxdb_df = pd.read_csv(paxdb_path, sep="\t", comment="#", header=None, 
+                           names=["gene_name", "string_external_id", "abundance"])
+    
+    # Extract gene id from PaxDB
+    paxdb_df["gene"] = (
+        paxdb_df["string_external_id"]
+        .astype(str)
+        .str.split(".")
+        .str[-1]
+        .str.strip()
+    )
+    paxdb_df["abundance"] = pd.to_numeric(paxdb_df["abundance"], errors="coerce")
+    paxdb_df = paxdb_df.dropna(subset=["gene", "abundance"])
+    
+    # Aggregate by gene
+    paxdb_gene = (
+        paxdb_df.groupby("gene", as_index=False)["abundance"]
+        .mean()
+        .rename(columns={"abundance": "protein_ppm"})
+    )
+    
+    print(f"PaxDB data loaded: {len(paxdb_gene)} unique genes with abundance data")
+    
+    # Initialize output dictionary
+    heteromeric_protein_info_dfs = {}
+    
+    total_combinations = len(heteromeric_enzyme_dfs) * len(p_total)
+    current_combination = 0
+    
+    print(f"\nProcessing {len(heteromeric_enzyme_dfs)} conditions × {len(p_total)} p_total values")
+    
+    # Process each condition and p_total combination
+    for condition_name, heteromeric_df in heteromeric_enzyme_dfs.items():
+        print(f"\nProcessing condition: {condition_name}")
+        
+        heteromeric_protein_info_dfs[condition_name] = {}
+        
+        for p_value in p_total:
+            current_combination += 1
+            print(f"  Processing p_total={p_value} ({current_combination}/{total_combinations})")
+            
+            if heteromeric_df is None or len(heteromeric_df) == 0:
+                print("    No heteromeric enzymes in this condition")
+                heteromeric_protein_info_dfs[condition_name][p_value] = None
+                continue
+            
+            # Work with a copy
+            df_copy = heteromeric_df.copy()
+            
+            # Calculate molecular weight for each subunit
+            df_copy['molecular_weight'] = df_copy['sequence'].apply(calculate_molecular_weight)
+            
+            # Merge with PaxDB abundance data
+            df_copy = pd.merge(df_copy, paxdb_gene, on='gene', how='left')
+            
+            # Calculate protein fraction and concentration for each subunit
+            df_copy['protein_fraction'] = df_copy['protein_ppm'] / 1e6
+            df_copy['protein_mol_gdcw'] = (
+                df_copy['protein_fraction'] * p_value / df_copy['molecular_weight']
+            )
+            df_copy['protein_mmol_gdcw'] = df_copy['protein_mol_gdcw'] * 1000
+            
+            # Calculate mass per subunit (g/gDCW) = protein_fraction * p_total
+            df_copy['subunit_g_gdcw'] = df_copy['protein_fraction'] * p_value
+            
+            # Group by reaction to aggregate subunits into complexes
+            complex_rows = []
+            
+            for rxn_id, group in df_copy.groupby('rxn'):
+                # Check if all subunits have abundance data
+                missing_abundance = group['protein_ppm'].isna().sum()
+                
+                if missing_abundance > 0:
+                    # Skip complexes with missing subunit data
+                    continue
+                
+                # Aggregate subunit information
+                complex_genes = sorted(group['gene'].unique().tolist())
+                complex_sequences = group['sequence'].tolist()
+                
+                # Sum molecular weights of all subunits
+                complex_mw = group['molecular_weight'].sum()
+                
+                # Sum mass fractions of all subunits (Davidi et al. Eq. S3)
+                complex_g_gdcw = group['subunit_g_gdcw'].sum()
+                
+                # Create a dictionary with subunit details
+                subunit_details = []
+                for _, subunit in group.iterrows():
+                    subunit_details.append({
+                        'gene': subunit['gene'],
+                        'protein_ppm': subunit['protein_ppm'],
+                        'molecular_weight': subunit['molecular_weight'],
+                        'g_gdcw': subunit['subunit_g_gdcw']
+                    })
+                
+                # Create complex row (take first row as template and modify)
+                complex_row = group.iloc[0].copy()
+                complex_row['complex_genes'] = ','.join(complex_genes)
+                complex_row['n_subunits'] = len(complex_genes)
+                complex_row['complex_molecular_weight'] = complex_mw
+                complex_row['complex_g_gdcw'] = complex_g_gdcw
+                complex_row['subunit_details'] = json.dumps(subunit_details)
+                
+                # Store gene list as a string for identification
+                complex_row['gene'] = ','.join(complex_genes)
+                
+                complex_rows.append(complex_row)
+            
+            if len(complex_rows) == 0:
+                print("    No complete complexes with all subunit data")
+                heteromeric_protein_info_dfs[condition_name][p_value] = pd.DataFrame()
+            else:
+                result_df = pd.DataFrame(complex_rows)
+                heteromeric_protein_info_dfs[condition_name][p_value] = result_df
+                print(f"    Successfully processed {len(result_df)} complete complexes")
+    
+    print("\nCompleted heteromeric protein mapping")
+    return heteromeric_protein_info_dfs
+
+
+def calculate_specific_activity_heteromeric(heteromeric_protein_info_dfs: dict):
+    """
+    Calculate specific activity (SA_app) for heteromeric complexes.
+    
+    Parameters:
+        heteromeric_protein_info_dfs: dict
+            Nested dictionary {condition: {p_total: dataframe}}
+    
+    Returns:
+        dict: Same structure with added 'SA_app' column (μmol/mg/min)
+    """
+    
+    print("Calculating specific activity for heteromeric complexes...")
+    
+    # Initialize output dictionary
+    SA_results = {}
+    
+    # Process each condition and p_total combination
+    for condition_name, p_total_dict in heteromeric_protein_info_dfs.items():
+        print(f"\nProcessing condition: {condition_name}")
+        
+        SA_results[condition_name] = {}
+        
+        for p_total_value, df in p_total_dict.items():
+            print(f"  Processing p_total={p_total_value}")
+            
+            # Skip if dataframe is None or empty
+            if df is None or len(df) == 0:
+                print("    Skipping - no data available")
+                SA_results[condition_name][p_total_value] = None
+                continue
+            
+            # Work with a copy
+            df_copy = df.copy()
+            
+            print(f"    Processing {len(df_copy)} heteromeric complexes")
+            
+            # Drop duplicate complexes (same gene set and substrate)
+            df_copy = df_copy.drop_duplicates(subset=['complex_genes', 'SMILES'])
+            print(f"    After removing duplicates: {len(df_copy)} complexes")
+            
+            # Convert flux to absolute value
+            df_copy['flux_value'] = df_copy['flux_value'].abs()
+            
+            # Convert flux from mmol/gDCW/h to μmol/gDCW/min
+            # mmol/gDCW/h * 1000 (to μmol) / 60 (to min) = μmol/gDCW/min
+            df_copy['flux_umol_gdcw_min'] = df_copy['flux_value'] * 1000 / 60
+            
+            # Calculate specific activity: flux (μmol/gDCW/min) / complex concentration (mg/gDCW)
+            # SA_app units: μmol/mg/min
+            # complex_g_gdcw is in g/gDCW, convert to mg/gDCW by multiplying by 1000
+            df_copy['SA_app'] = df_copy['flux_umol_gdcw_min'] / (df_copy['complex_g_gdcw'] * 1000)
+            
+            # Replace infinite values with NaN
+            df_copy['SA_app'] = df_copy['SA_app'].replace([float('inf'), float('-inf')], float('nan'))
+            
+            # Count valid SA_app values
+            valid_SA = df_copy['SA_app'].notna().sum()
+            print(f"    Calculated SA_app for {valid_SA} complexes")
+            
+            # Store the processed dataframe
+            SA_results[condition_name][p_total_value] = df_copy
+    
+    print("\nCompleted SA_app calculation for all conditions and p_total values")
+    return SA_results
+
+
+def evaluate_specific_activity_heteromeric(SA_results: dict, 
+                                           upper_threshold: float = 1e4, 
+                                           lower_threshold: float = 1e-3):
+    """
+    Filter unrealistic specific activity values for heteromeric complexes.
+    
+    Parameters:
+        SA_results: dict
+            Nested dictionary {condition: {p_total: dataframe}}
+        upper_threshold: float
+            Upper threshold for SA_app (default: 1e4 μmol/mg/min)
+        lower_threshold: float
+            Lower threshold for SA_app (default: 1e-3 μmol/mg/min)
+    
+    Returns:
+        SA_filtered_results: dict
+            Same structure with filtered dataframes
+    """
+    
+    print(f"Filtering SA_app values outside range: {lower_threshold:.0e} to {upper_threshold:.0e} μmol/mg/min")
+    
+    # Initialize output dictionary
+    SA_filtered_results = {}
+    
+    # Track filtering statistics
+    total_original_rows = 0
+    total_filtered_rows = 0
+    total_removed_high = 0
+    total_removed_low = 0
+    
+    # Process each condition and p_total
+    for condition_name, p_total_dict in SA_results.items():
+        print(f"\nProcessing condition: {condition_name}")
+        
+        SA_filtered_results[condition_name] = {}
+        
+        for p_total_value, df in p_total_dict.items():
+            print(f"  Processing p_total={p_total_value}")
+            
+            # Skip if dataframe is None
+            if df is None or len(df) == 0:
+                print("    Skipping - no data available")
+                SA_filtered_results[condition_name][p_total_value] = None
+                continue
+            
+            # Work with a copy
+            df_filtered = df.copy()
+            
+            original_count = len(df_filtered)
+            print(f"    Original rows: {original_count}")
+            
+            # Count values that will be removed
+            high_values = df_filtered['SA_app'] > upper_threshold
+            low_values = df_filtered['SA_app'] < lower_threshold
+            removed_high_count = high_values.sum()
+            removed_low_count = low_values.sum()
+            
+            # Filter
+            mask = (df_filtered['SA_app'].isna()) | \
+                   ((df_filtered['SA_app'] >= lower_threshold) & (df_filtered['SA_app'] <= upper_threshold))
+            df_filtered = df_filtered[mask]
+            
+            filtered_count = len(df_filtered)
+            total_removed_count = original_count - filtered_count
+            
+            print(f"    Filtered rows: {filtered_count}")
+            print(f"    Removed total: {total_removed_count} (high: {removed_high_count}, low: {removed_low_count})")
+            
+            # Update statistics
+            total_original_rows += original_count
+            total_filtered_rows += filtered_count
+            total_removed_high += removed_high_count
+            total_removed_low += removed_low_count
+            
+            # Store the filtered dataframe
+            SA_filtered_results[condition_name][p_total_value] = df_filtered
+    
+    # Print summary
+    total_removed_rows = total_removed_high + total_removed_low
+    print("\nFiltering Summary:")
+    print(f"Total original rows: {total_original_rows}")
+    print(f"Total filtered rows: {total_filtered_rows}")
+    print(f"Total removed rows: {total_removed_rows}")
+    print(f"  - Removed high values (>{upper_threshold:.0e}): {total_removed_high}")
+    print(f"  - Removed low values (<{lower_threshold:.0e}): {total_removed_low}")
+    if total_original_rows > 0:
+        removal_percentage = (total_removed_rows / total_original_rows) * 100
+        print(f"Percentage removed: {removal_percentage:.1f}%")
+    
+    return SA_filtered_results
+
+
+def get_SA_max_heteromeric(SA_results: dict):
+    """
+    Find maximum specific activity across all conditions for heteromeric complexes.
+    
+    Parameters:
+        SA_results: dict
+            Nested dictionary {condition: {p_total: dataframe}}
+    
+    Returns:
+        pd.DataFrame: DataFrame with SA_max for each complex-substrate pair
+    """
+    
+    print("Finding SA_max for heteromeric complexes...")
+    
+    # List to collect all dataframes
+    all_dataframes = []
+    
+    # Flatten nested structure
+    for condition_name, p_total_dict in SA_results.items():
+        for p_total_value, df in p_total_dict.items():
+            if df is None or len(df) == 0:
+                continue
+            
+            # Add metadata
+            df_with_metadata = df.copy()
+            df_with_metadata['source_condition'] = condition_name
+            df_with_metadata['source_p_total'] = p_total_value
+            
+            # Keep only valid SA_app values
+            df_with_metadata = df_with_metadata[df_with_metadata['SA_app'].notna()]
+            
+            if len(df_with_metadata) > 0:
+                all_dataframes.append(df_with_metadata)
+                print(f"  Added {len(df_with_metadata)} entries from {condition_name}, p_total={p_total_value}")
+    
+    if not all_dataframes:
+        print("No valid data found")
+        return pd.DataFrame(columns=['complex_genes', 'SMILES', 'SA_app_max', 'condition_max', 'p_total_max'])
+    
+    # Concatenate
+    combined_df = pd.concat(all_dataframes, ignore_index=True)
+    print(f"Combined dataframe has {len(combined_df)} total entries")
+    
+    # Find maximum SA_app for each complex-substrate pair
+    print("Finding maximum SA_app for each complex-substrate pair...")
+    
+    SA_max_results = (
+        combined_df.loc[combined_df.groupby(['complex_genes', 'SMILES'])['SA_app'].idxmax()]
+        .reset_index(drop=True)
+    )
+    
+    # Select relevant columns
+    output_columns = [
+        'complex_genes', 'n_subunits', 'SMILES', 'SA_app', 'source_condition', 'source_p_total',
+        'rxn', 'flux_value', 'FVA_upper', 'FVA_lower', 'complex_g_gdcw', 'complex_molecular_weight',
+        'subsystem', 'subunit_details'
+    ]
+    
+    available_columns = [col for col in output_columns if col in SA_max_results.columns]
+    SA_max_results = SA_max_results[available_columns].copy()
+    
+    # Rename columns
+    column_renames = {
+        'SA_app': 'SA_app_max',
+        'source_condition': 'condition_max',
+        'source_p_total': 'p_total_max'
+    }
+    SA_max_results = SA_max_results.rename(columns=column_renames)
+    
+    # Sort by SA_app_max
+    SA_max_results = SA_max_results.sort_values('SA_app_max', ascending=False).reset_index(drop=True)
+    
+    print(f"Found maximum SA_app for {len(SA_max_results)} unique complex-substrate pairs")
+    print(f"SA_app_max range: {SA_max_results['SA_app_max'].min():.2e} to {SA_max_results['SA_app_max'].max():.2e} μmol/mg/min")
+    
+    # Show summary
+    condition_counts = SA_max_results['condition_max'].value_counts()
+    print("Maximum values found across conditions:")
+    for condition, count in condition_counts.items():
+        print(f"  {condition}: {count} complex-substrate pairs")
+    
+    return SA_max_results
+
+
+def get_eta_heteromeric(SA_results: dict, SA_max_results: pd.DataFrame):
+    """
+    Calculate eta (SA_app/SA_max) and variance metrics for heteromeric complexes.
+    
+    Parameters:
+        SA_results: dict
+            Nested dictionary {condition: {p_total: dataframe}}
+        SA_max_results: pd.DataFrame
+            DataFrame with SA_max values
+    
+    Returns:
+        tuple: (SA_results_with_eta, SA_max_results_with_variance)
+    """
+    
+    print("Calculating eta (SA_app/SA_max) for heteromeric complexes...")
+    
+    # Initialize output dictionary
+    SA_results_with_eta = {}
+    
+    # List to collect eta values
+    all_eta_values = []
+    
+    # Process each condition and p_total
+    for condition_name, p_total_dict in SA_results.items():
+        print(f"\nProcessing condition: {condition_name}")
+        
+        SA_results_with_eta[condition_name] = {}
+        
+        for p_total_value, df in p_total_dict.items():
+            print(f"  Processing p_total={p_total_value}")
+            
+            # Skip if dataframe is None
+            if df is None or len(df) == 0:
+                print("    Skipping - no data available")
+                SA_results_with_eta[condition_name][p_total_value] = None
+                continue
+            
+            # Work with a copy
+            df_with_eta = df.copy()
+            
+            # Merge with SA_max_results
+            df_with_eta = pd.merge(
+                df_with_eta,
+                SA_max_results[['complex_genes', 'SMILES', 'SA_app_max']],
+                on=['complex_genes', 'SMILES'],
+                how='left'
+            )
+            
+            # Calculate eta
+            df_with_eta['eta'] = df_with_eta['SA_app'] / df_with_eta['SA_app_max']
+            
+            # Replace infinite values with NaN
+            df_with_eta['eta'] = df_with_eta['eta'].replace([float('inf'), float('-inf')], float('nan'))
+            
+            # Count valid eta values
+            valid_eta = df_with_eta['eta'].notna().sum()
+            print(f"    Calculated eta for {valid_eta} complex-substrate pairs")
+            
+            # Store
+            SA_results_with_eta[condition_name][p_total_value] = df_with_eta
+            
+            # Collect eta values for variance
+            eta_data = df_with_eta[['complex_genes', 'SMILES', 'eta']].copy()
+            eta_data['source_condition'] = condition_name
+            eta_data['source_p_total'] = p_total_value
+            eta_data = eta_data[eta_data['eta'].notna()]
+            
+            if len(eta_data) > 0:
+                all_eta_values.append(eta_data)
+    
+    # Calculate variance metrics
+    print("\nCalculating variance metrics...")
+    
+    if not all_eta_values:
+        print("No valid eta values found")
+        SA_max_with_variance = SA_max_results.copy()
+        SA_max_with_variance['eta_mean'] = float('nan')
+        SA_max_with_variance['eta_stdev'] = float('nan')
+        SA_max_with_variance['eta_min'] = float('nan')
+        SA_max_with_variance['eta_max'] = float('nan')
+        SA_max_with_variance['eta_cv'] = float('nan')
+        return SA_results_with_eta, SA_max_with_variance
+    
+    # Concatenate
+    all_eta_df = pd.concat(all_eta_values, ignore_index=True)
+    print(f"Collected {len(all_eta_df)} eta values")
+    
+    # Calculate variance metrics
+    variance_metrics = all_eta_df.groupby(['complex_genes', 'SMILES'])['eta'].agg([
+        ('eta_mean', 'mean'),
+        ('eta_stdev', 'std'),
+        ('eta_min', 'min'),
+        ('eta_max', 'max'),
+        ('eta_count', 'count')
+    ]).reset_index()
+    
+    # Calculate CV
+    variance_metrics['eta_cv'] = variance_metrics['eta_stdev'] / variance_metrics['eta_mean']
+    variance_metrics['eta_cv'] = variance_metrics['eta_cv'].replace([float('inf'), float('-inf')], float('nan'))
+    
+    # Merge with SA_max_results
+    SA_max_with_variance = pd.merge(
+        SA_max_results,
+        variance_metrics[['complex_genes', 'SMILES', 'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv']],
+        on=['complex_genes', 'SMILES'],
+        how='left'
+    )
+    
+    print(f"Added variance metrics to {len(SA_max_with_variance)} complex-substrate pairs")
+    
+    return SA_results_with_eta, SA_max_with_variance
+
+
+def combine_homomeric_heteromeric_results(kmax_results: pd.DataFrame, 
+                                          SA_max_results: pd.DataFrame):
+    """
+    Combine homomeric and heteromeric results into a single dataframe.
+    
+    Parameters:
+        kmax_results: pd.DataFrame
+            Homomeric kmax results
+        SA_max_results: pd.DataFrame
+            Heteromeric SA_max results
+    
+    Returns:
+        pd.DataFrame: Combined results with enzyme_type column
+    """
+    
+    print("Combining homomeric and heteromeric results...")
+    
+    # Add enzyme type column
+    kmax_with_type = kmax_results.copy()
+    kmax_with_type['enzyme_type'] = 'homomeric'
+    kmax_with_type['enzyme_id'] = kmax_with_type['gene']
+    kmax_with_type['rate_value'] = kmax_with_type['kcat_app_max']
+    kmax_with_type['rate_units'] = 's^-1'
+    
+    SA_max_with_type = SA_max_results.copy()
+    SA_max_with_type['enzyme_type'] = 'heteromeric'
+    SA_max_with_type['enzyme_id'] = SA_max_with_type['complex_genes']
+    SA_max_with_type['rate_value'] = SA_max_with_type['SA_app_max']
+    SA_max_with_type['rate_units'] = 'μmol/mg/min'
+    
+    # Convert heteromeric SA to kcat if desired (optional)
+    # kcat [s^-1] = SA [μmol/mg/min] * MW [mg/μmol] / 60 [s/min]
+    # kcat = SA * MW / 60, where MW is in g/mol = mg/mmol = mg/(1000*μmol)
+    if 'complex_molecular_weight' in SA_max_with_type.columns:
+        SA_max_with_type['kcat_app_max_converted'] = (
+            SA_max_with_type['SA_app_max'] * 
+            SA_max_with_type['complex_molecular_weight'] / 
+            1000 /  # Convert g/mol to mg/μmol
+            60      # Convert minutes to seconds
+        )
+    
+    # Select common columns for merging
+    common_columns = [
+        'enzyme_type', 'enzyme_id', 'rate_value', 'rate_units',
+        'SMILES', 'rxn', 'condition_max', 'p_total_max',
+        'flux_value', 'subsystem',
+        'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv'
+    ]
+    
+    # Only keep columns that exist in both dataframes
+    kmax_available = [col for col in common_columns if col in kmax_with_type.columns]
+    SA_available = [col for col in common_columns if col in SA_max_with_type.columns]
+    
+    # Add specific columns for each type
+    kmax_specific = ['gene', 'sequence', 'kcat_app_max', 'protein_mmol_gdcw']
+    SA_specific = ['complex_genes', 'n_subunits', 'SA_app_max', 'complex_g_gdcw', 'complex_molecular_weight']
+    
+    if 'kcat_app_max_converted' in SA_max_with_type.columns:
+        SA_specific.append('kcat_app_max_converted')
+    
+    kmax_cols = kmax_available + [col for col in kmax_specific if col in kmax_with_type.columns]
+    SA_cols = SA_available + [col for col in SA_specific if col in SA_max_with_type.columns]
+    
+    # Create subset dataframes
+    kmax_subset = kmax_with_type[kmax_cols].copy()
+    SA_subset = SA_max_with_type[SA_cols].copy()
+    
+    # Concatenate
+    combined_results = pd.concat([kmax_subset, SA_subset], ignore_index=True, sort=False)
+    
+    # Sort by rate_value (descending)
+    combined_results = combined_results.sort_values('rate_value', ascending=False).reset_index(drop=True)
+    
+    print(f"\nCombined results:")
+    print(f"  Homomeric enzymes: {len(kmax_results)}")
+    print(f"  Heteromeric complexes: {len(SA_max_results)}")
+    print(f"  Total: {len(combined_results)}")
+    
+    # Summary statistics
+    homomeric_count = (combined_results['enzyme_type'] == 'homomeric').sum()
+    heteromeric_count = (combined_results['enzyme_type'] == 'heteromeric').sum()
+    
+    print(f"\nBreakdown by enzyme type:")
+    print(f"  Homomeric: {homomeric_count} ({homomeric_count/len(combined_results)*100:.1f}%)")
+    print(f"  Heteromeric: {heteromeric_count} ({heteromeric_count/len(combined_results)*100:.1f}%)")
+    
+    return combined_results
+
+
+def expand_heteromeric_to_subunits(SA_max_results: pd.DataFrame):
+    """
+    Expand heteromeric complex results to create one row per subunit.
+    Each subunit row inherits the SA_app_max from its parent complex.
+    
+    Parameters:
+        SA_max_results: pd.DataFrame
+            Heteromeric SA_max results with one row per complex
+    
+    Returns:
+        pd.DataFrame: Expanded dataframe with columns:
+            - sequence: Individual subunit sequence
+            - gene: Individual subunit gene
+            - SMILES: Substrate
+            - SA_app_max: Specific activity (same for all subunits in a complex)
+            - complex_genes: Original complex identifier
+            - n_subunits: Number of subunits in complex
+            - subunit_role: Position/identifier within complex
+    """
+    
+    print("Expanding heteromeric complexes to individual subunits...")
+    
+    if SA_max_results is None or len(SA_max_results) == 0:
+        print("  No heteromeric data to expand")
+        return pd.DataFrame(columns=['sequence', 'gene', 'SMILES', 'SA_app_max'])
+    
+    expanded_rows = []
+    
+    for idx, row in SA_max_results.iterrows():
+        # Parse subunit details from JSON
+        try:
+            subunit_details = json.loads(row['subunit_details'])
+        except (KeyError, json.JSONDecodeError, TypeError):
+            print(f"  Warning: Could not parse subunit_details for complex {row.get('complex_genes', 'unknown')}")
+            continue
+        
+        # Get complex-level information
+        complex_genes_list = row['complex_genes'].split(',')
+        
+        # For each subunit in the complex
+        for i, subunit in enumerate(subunit_details):
+            # Create a new row for this subunit
+            subunit_row = row.copy()
+            
+            # Override with subunit-specific information
+            subunit_row['gene'] = subunit['gene']
+            subunit_row['subunit_role'] = f"subunit_{i+1}_of_{len(subunit_details)}"
+            subunit_row['subunit_molecular_weight'] = subunit['molecular_weight']
+            subunit_row['subunit_protein_ppm'] = subunit['protein_ppm']
+            subunit_row['subunit_g_gdcw'] = subunit['g_gdcw']
+            
+            # Note: We need to get the sequence for this subunit
+            # The sequence is not stored in subunit_details, so we'll need to handle this
+            # We'll add a placeholder that should be filled by merging with sequence data
+            
+            expanded_rows.append(subunit_row)
+    
+    if not expanded_rows:
+        print("  No subunits could be expanded")
+        return pd.DataFrame(columns=['sequence', 'gene', 'SMILES', 'SA_app_max'])
+    
+    # Create expanded dataframe
+    expanded_df = pd.DataFrame(expanded_rows)
+    
+    print(f"  Expanded {len(SA_max_results)} complexes into {len(expanded_df)} subunit rows")
+    print(f"  Average subunits per complex: {len(expanded_df)/len(SA_max_results):.1f}")
+    
+    return expanded_df
+
+
+def create_unified_kcat_SA(kmax_results: pd.DataFrame, 
+                                           SA_max_results: pd.DataFrame,
+                                           sequence_df: pd.DataFrame):
+    """
+    Create a unified dataframe with sequence-substrate pairs from both homomeric 
+    and heteromeric enzymes, with appropriate rate metrics.
+    
+    For homomeric: sequence maps to kcat_app_max (s⁻¹)
+    For heteromeric: each subunit sequence maps to SA_app_max (μmol/mg/min) of its complex
+    
+    Parameters:
+        kmax_results: pd.DataFrame
+            Homomeric kmax results
+        SA_max_results: pd.DataFrame
+            Heteromeric SA_max results
+        sequence_df: str or pd.DataFrame
+            Sequence dataframe or path to CSV file
+    
+    Returns:
+        pd.DataFrame: Unified view with columns:
+            - sequence: Protein sequence
+            - gene: Gene identifier
+            - SMILES: Substrate
+            - rate_value: Either kcat_app_max or SA_app_max
+            - rate_units: Either 's^-1' or 'μmol/mg/min'
+            - enzyme_type: 'homomeric' or 'heteromeric'
+            - molecular_weight: Protein MW (g/mol)
+            - [for heteromeric: complex_genes, n_subunits, subunit_role]
+    """
+    
+    print("Creating unified sequence-substrate view...")
+    
+    sequence_df = load_dataframe_if_path(sequence_df)
+    
+    # Process homomeric data
+    homo_view = kmax_results.copy()
+    homo_view['enzyme_type'] = 'homomeric'
+    homo_view['rate_value'] = homo_view['kcat_app_max']
+    homo_view['rate_units'] = 's^-1'
+    
+    # Select relevant columns for homomeric
+    homo_columns = [
+        'sequence', 'gene', 'SMILES', 'rate_value', 'rate_units', 'enzyme_type',
+        'rxn', 'condition_max', 'p_total_max', 'flux_value', 'subsystem',
+        'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv',
+        'kcat_app_max', 'protein_mmol_gdcw'
+    ]
+    homo_columns = [col for col in homo_columns if col in homo_view.columns]
+    homo_view = homo_view[homo_columns].copy()
+    
+    # Process heteromeric data - expand to subunits
+    hetero_expanded = expand_heteromeric_to_subunits(SA_max_results)
+    
+    if len(hetero_expanded) > 0:
+        # Merge with sequence data to get sequences
+        hetero_expanded = pd.merge(
+            hetero_expanded,
+            sequence_df[['model_gene_id', 'sequence']],
+            left_on='gene',
+            right_on='model_gene_id',
+            how='left'
+        )
+        
+        hetero_expanded['enzyme_type'] = 'heteromeric'
+        hetero_expanded['rate_value'] = hetero_expanded['SA_app_max']
+        hetero_expanded['rate_units'] = 'μmol/mg/min'
+        
+        # Select relevant columns for heteromeric
+        hetero_columns = [
+            'sequence', 'gene', 'SMILES', 'rate_value', 'rate_units', 'enzyme_type',
+            'rxn', 'condition_max', 'p_total_max', 'flux_value', 'subsystem',
+            'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv',
+            'SA_app_max', 'complex_genes', 'n_subunits', 'subunit_role',
+            'subunit_molecular_weight', 'subunit_protein_ppm', 'complex_g_gdcw'
+        ]
+        hetero_columns = [col for col in hetero_columns if col in hetero_expanded.columns]
+        hetero_view = hetero_expanded[hetero_columns].copy()
+    else:
+        hetero_view = pd.DataFrame()
+    
+    # Combine both views
+    if len(hetero_view) > 0:
+        unified_view = pd.concat([homo_view, hetero_view], ignore_index=True, sort=False)
+    else:
+        unified_view = homo_view.copy()
+    
+    # Sort by rate_value (descending)
+    unified_view = unified_view.sort_values('rate_value', ascending=False).reset_index(drop=True)
+    
+    print(f"\nUnified view created:")
+    print(f"  Homomeric sequences: {len(homo_view)}")
+    print(f"  Heteromeric subunits: {len(hetero_view)}")
+    print(f"  Total sequence-substrate pairs: {len(unified_view)}")
+    
+    # Check for sequences present in both homomeric and heteromeric
+    if len(hetero_view) > 0:
+        homo_genes = set(homo_view['gene'].dropna())
+        hetero_genes = set(hetero_view['gene'].dropna())
+        overlap = homo_genes & hetero_genes
+        
+        if overlap:
+            print(f"\n  Note: {len(overlap)} genes appear in both homomeric and heteromeric forms")
+            print(f"  Examples: {list(overlap)[:5]}")
+    
+    return unified_view
+
+
+def convert_SA_to_kcat(unified_view: pd.DataFrame):
+    """
+    Add a converted kcat column for heteromeric enzymes to enable direct comparison
+    with homomeric kcat values.
+    
+    Conversion: kcat [s⁻¹] = SA [μmol/mg/min] × MW [g/mol] / 1000 / 60
+    
+    For heteromeric subunits, uses the subunit molecular weight.
+    
+    Parameters:
+        unified_view: pd.DataFrame
+            Output from def create_unified_kcat_SA(kmax_results: pd.DataFrame, 
+
+    
+    Returns:
+        pd.DataFrame: Same dataframe with added 'kcat_converted' column
+    """
+    
+    print("Converting SA to kcat for heteromeric subunits...")
+    
+    df = unified_view.copy()
+    
+    # Initialize kcat_converted column
+    df['kcat_converted'] = np.nan
+    
+    # For homomeric: kcat_converted = kcat_app_max (already in s⁻¹)
+    if 'kcat_app_max' in df.columns:
+        homo_mask = df['enzyme_type'] == 'homomeric'
+        df.loc[homo_mask, 'kcat_converted'] = df.loc[homo_mask, 'kcat_app_max']
+    
+    # For heteromeric: convert SA to kcat using subunit MW
+    hetero_mask = df['enzyme_type'] == 'heteromeric'
+    
+    if hetero_mask.any() and 'subunit_molecular_weight' in df.columns:
+        # kcat [s⁻¹] = SA [μmol/mg/min] × MW [g/mol] / 1000 / 60
+        # where MW in g/mol needs to be converted to mg/μmol
+        # 1 g/mol = 1 mg/mmol = 1 mg/(1000 μmol) = 0.001 mg/μmol
+        
+        df.loc[hetero_mask, 'kcat_converted'] = (
+            df.loc[hetero_mask, 'rate_value'] *  # SA in μmol/mg/min
+            df.loc[hetero_mask, 'subunit_molecular_weight'] /  # MW in g/mol
+            1000 /  # Convert to mg/μmol
+            60      # Convert min to seconds
+        )
+        
+        converted_count = df.loc[hetero_mask, 'kcat_converted'].notna().sum()
+        print(f"  Converted SA to kcat for {converted_count} heteromeric subunits")
+        
+        if converted_count > 0:
+            kcat_range = df.loc[hetero_mask & df['kcat_converted'].notna(), 'kcat_converted']
+            print(f"  Converted kcat range: {kcat_range.min():.2e} to {kcat_range.max():.2e} s⁻¹")
+    
+    return df
