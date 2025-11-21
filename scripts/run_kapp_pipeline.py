@@ -163,21 +163,21 @@ def run_kapp_pipeline(organism: str,
     sequence_df_loaded.to_csv(data_dir / "sequence_df.csv", index=False)
 
         
+
     # ==== 5. Get substrate information ====
     print("\n==== STEP 5. Load substrate information ====")
-    try:
-        substrate_df_loaded = pd.read_csv(substrate_df)
-        print(f"Substrate dataframe loaded: {len(substrate_df_loaded)} rows")
-    except Exception as e:
-        raise ValueError(f"Substrate dataframe not found at {substrate_df}. Error: {e}")
-    
-    # if substrate_df:
-    #     try:
-    #         substrate_df = pd.read_csv(substrate_df)
-    #     except:
-    #         raise ValueError(f"Substrate dataframe not found at {substrate_df}")
-    # else:
-    #     substrate_df = get_substrate_df(model)
+    from src.substrate_mapper import get_substrate_df 
+    if substrate_df:
+         try:
+             substrate_df_loaded = pd.read_csv(substrate_df)
+         except:
+             raise ValueError(f"Substrate dataframe not found at {substrate_df}. Error: {e}")
+    else:
+         print("No substrate dataframe provided, generating from model.")
+         substrate_df_loaded = get_substrate_df(model)
+
+    substrate_df_loaded.to_csv(data_dir / "substrate_df.csv", index=False)
+    print(f"Substrate dataframe created: {len(substrate_df_loaded)} rows at {data_dir / 'substrate_df.csv'}")
 
     
     # ==== 6. Create enzyme information dataframe ====
