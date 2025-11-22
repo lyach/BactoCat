@@ -215,8 +215,9 @@ def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bo
         lower_col = f'FVA_lower_cond{cond_num}'
         upper_col = f'FVA_upper_cond{cond_num}'
         
-        below_mask = merged_df[col] < merged_df[lower_col]
-        above_mask = merged_df[col] > merged_df[upper_col]
+        # Check lower bound violations - with small tolerance
+        below_mask = merged_df[col] < (merged_df[lower_col]- 1e-6)
+        above_mask = merged_df[col] > (merged_df[upper_col]+ 1e-6)
         
         for idx in merged_df[below_mask].index:
             violations.append({
@@ -238,7 +239,31 @@ def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bo
             })
     
     violations_df = pd.DataFrame(violations)
-    print(f"Detected {len(violations_df)} violations of FVA bounds.")
+    
+    # DEBUG
+    if not violations_df.empty:
+        unique_rxns = violations_df['rxn_id'].nunique()
+        total_violations = len(violations_df)
+        
+        print(f"\n{'='*10} FVA VIOLATION REPORT {'='*10}")
+        print(f"Total violation instances (Cell count): {total_violations}")
+        print(f"Unique reactions affected (Row count): {unique_rxns}")
+        
+        print("\nViolations by Condition:")
+        print(violations_df.groupby('condition').size().to_string())
+                
+        # Show detailed values for top 10 most problematic reactions
+        top_problematic = violations_df['rxn_id'].value_counts().head(10).index.tolist()
+        top_violations = violations_df[violations_df['rxn_id'].isin(top_problematic)]
+        
+        print("\nValues for Violating Reactions:")
+        display_cols = ['rxn_id', 'condition', 'violation_type', 'flux', 'FVA_lower', 'FVA_upper']
+        print(top_violations[display_cols].to_string(index=False))
+        
+        print(f"{'='*42}\n")
+    else:
+        print("No FVA violations detected.")
+    
     
     if filter and not violations_df.empty:
         violating_rxns = violations_df['rxn_id'].unique()
@@ -246,7 +271,6 @@ def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bo
         merged_df = merged_df[~merged_df['rxn_id'].isin(violating_rxns)].copy()
         after = len(merged_df)
         print(f"Filtered out {before - after} reactions with violations.")
-    
     filtered_fluxomics_df = merged_df.copy()
     return filtered_fluxomics_df, violations_df
 

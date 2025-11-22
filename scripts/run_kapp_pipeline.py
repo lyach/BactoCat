@@ -92,6 +92,17 @@ def run_kapp_pipeline(organism: str,
         model = cobra.io.read_sbml_model(model_path)
         model = model.copy()
         print(f"Model loaded successfully from {model_path}")
+        
+        # Solver tolerance settings
+        try:
+            solver_instance = model.solver
+            if hasattr(solver_instance, 'configuration') and hasattr(solver_instance.configuration, 'tolerances'):
+                tolerances = solver_instance.configuration.tolerances
+                print(f"Feasibility Tolerance: {tolerances.feasibility}")
+                print(f"Optimality Tolerance:  {tolerances.optimality}")
+                print(f"Integrality Tolerance: {tolerances.integrality}")
+        except Exception:
+            print("Note: Solver tolerance information not available")
     except Exception as e:
         raise ValueError(f"Model not found at {model_path}. Error: {e}")
     
