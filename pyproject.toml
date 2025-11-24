@@ -25,6 +25,9 @@ dependencies = [
     "bioservices",
     "mygene",
     "tqdm",
+    "pubchempy",
+    "dotenv",
+    "loguru"
 ]
 
 # --- uv ---

@@ -15,7 +15,7 @@ DATA_DIR = PROJ_ROOT / "data"
 RAW_DATA_DIR = DATA_DIR / "raw"
 INTERIM_DATA_DIR = DATA_DIR / "interim"
 PROCESSED_DATA_DIR = DATA_DIR / "processed"
-EXTERNAL_DATA_DIR = DATA_DIR / "external databases"
+EXTERNAL_DATA_DIR = DATA_DIR / "external_databases"
 
 MODELS_DIR = PROJ_ROOT / "models"
 
@@ -23,7 +23,7 @@ ECOLI_VALIDATION_DIR = DATA_DIR / "E_coli fitness validation"
 
 REPORTS_DIR = PROJ_ROOT / "reports"
 FIGURES_DIR = REPORTS_DIR / "figures"
-
+ 
 # Define paths to database files
 BiGG_MAPPING = EXTERNAL_DATA_DIR / "BiGG_mapping.csv"
 BIGG_METABOLITES = EXTERNAL_DATA_DIR / "bigg_models_metabolites.txt"
@@ -75,3 +75,4 @@ __all__ = [
     'METANETX_XREF', 'SEED_COMPOUNDS', 'SEED_ALIASES', 'TAXONOMY_IDS',
     'ensure_dir_exists'
 ]
+ 

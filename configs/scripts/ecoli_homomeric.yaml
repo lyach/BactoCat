@@ -16,7 +16,7 @@ p_total: [0.32, 0.435, 0.55]
 paxdb_path: "../data/raw/PaxDb/511145_ecoli/511145-WHOLE_ORGANISM-integrated.txt"
 
 # ==== Input Data Files ====
-substrate_df: "../data/processed/kinGEMs_iML1515/iML1515_substrates.csv"
+# substrate_df: "../data/processed/kinGEMs_iML1515/iML1515_substrates.csv"
 sequence_df: "../data/processed/UniProt/iML1515_E coli_83333_UniProt.csv"
 
 # ==== Output Configuration ====
