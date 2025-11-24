@@ -48,6 +48,7 @@ Thumbs.db
 
 # Folders
 misc/discarded/*
+misc/external databases/
 data/final
 notebooks/
 notebooks/results/
