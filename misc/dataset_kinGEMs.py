@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 import pubchempy as pcp  # noqa: F401
 
-from .config import (
+from ..src.config import (
     CHEBI_COMPOUNDS,
     CHEBI_INCHI,
     METANETX_COMPOUNDS,

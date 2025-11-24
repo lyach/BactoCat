@@ -53,7 +53,7 @@ data/final
 notebooks/
 notebooks/results/
 scripts/runs/
-
+data/external_databases/*
 # Cache files
 cache/
 
