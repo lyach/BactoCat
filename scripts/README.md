@@ -1,59 +1,130 @@
 # k<sub>app</sub> Pipeline
 
-This directory contains an automated pipeline for calculating apparent *in vivo* turnover numbers (k<sub>app</sub>) for *E. coli* enzymes.
+This directory contains an automated pipeline for calculating apparent *in vivo* turnover numbers (k<sub>app</sub>) from genome-scale metabolic models.
 
+## Installation
 
+First, install BactoCat as an editable package from the project root:
+
+```bash
+cd BactoCat
+pip install -e .
+```
+
+This installs:
+- All required dependencies
+- The `run-kapp-pipeline` CLI command
+- BactoCat modules for import
 
 ## Quick Start
 
 ### Basic Usage
 
+After installation, run the pipeline using the CLI command:
+
 ```bash
-cd BactoCat
-python .\scripts\run_kapp_pipeline.py .\configs\scripts\ecoli_homomeric.yaml
+# From anywhere (after installation)
+run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+
+# Or using Python module syntax
+python -m scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+```
+
+### Verbose Mode
+
+For detailed debug output including function calls and line numbers:
+
+```bash
+run-kapp-pipeline -v configs/run_kapp_pipeline/ecoli_homomeric.yaml
 ```
 
 ## Configuration File
 
-The pipeline is controlled by a YAML configuration file (saved under `configs\scripts`). Here's what each parameter does:
+The pipeline is controlled by a YAML configuration file (saved under `configs/run_kapp_pipeline/`). All paths are relative to the **project root**.
 
 ### Model Configuration
 
-- **`organism`**: Name of the organism, to use in outputs
-- **`model_path`**: Path to your SBML model file (e.g., `iML1515_GEM.xml`)
-- **`flux_method`**: Choose between `"FBA"` or `"pFBA"` for flux simulations
+- **`organism`**: Organism name for outputs
+- **`model_path`**: Path to SBML model file 
+- **`solver`**: Optimization solver - `"cplex"`, `"gurobi"`, or `"glpk"`
+- **`flux_method`**: Flux analysis method - `"FBA"` or `"pFBA"`
 
 ### Flux Simulation Parameters
 
-- **`carbon_uptake`**: List of carbon uptake rates in mmol/gDW·h (e.g., `[2, 6, 10]`)
-- **`oxygen_uptake`**: List of oxygen uptake rates in mmol/gDW·h (e.g., `[15, 17.5, 20]`)
+- **`carbon_uptake`**: Carbon uptake rates in mmol/gDW·h 
+- **`oxygen_uptake`**: Oxygen uptake rates in mmol/gDW·h 
+- **`carbon_exchange_rxn`**: Carbon exchange reaction ID 
+- **`oxygen_exchange_rxn`**: Oxygen exchange reaction ID
+- **`mu_fraction`**: Growth rate fraction for FVA 
 
-The pipeline will test all combinations of these rates (e.g., 3 carbon × 3 oxygen = 9 conditions).
+The pipeline tests all combinations of carbon and oxygen rates (e.g., 3 × 3 = 9 conditions).
 
 ### Proteomics Parameters
 
-- **`p_total`**: Total cellular protein content values in g/gDCW (e.g., `[0.32, 0.435, 0.55]`)
+- **`p_total`**: Total protein fractions in g/gDCW 
 - **`paxdb_path`**: Path to PaxDB proteomics data file
 
-### Input Data
+### Input Data (Optional)
 
-If available, one can pass cached data for:
+Pre-computed data can be provided to speed up the pipeline:
 
-- **`substrate_df`**: Path to substrate information CSV (SMILES and reaction mapping)
+- **`substrate_df`**: Path to substrate CSV (SMILES and reaction mapping)
 - **`sequence_df`**: Path to protein sequence CSV (from UniProt)
 
-### Output
+If not provided, these will be auto-generated.
 
-- **`output_dir`** *(optional)*: Directory for results. Defaults to `../scripts/results/`
+### Filtering Thresholds
+
+- **`upper_threshold`**: Maximum k<sub>app</sub> in s⁻¹ 
+- **`lower_threshold`**: Minimum k<sub>app</sub> in s⁻¹
+
+### Example Configuration
+
+```yaml
+# configs/run_kapp_pipeline/ecoli_homomeric.yaml
+organism: "ecoli"
+model_path: "data/raw/gems/iml1515.xml"
+solver: "cplex"
+flux_method: "pFBA"
+
+carbon_uptake: [2, 6, 10]
+oxygen_uptake: [15, 17.5, 20]
+carbon_exchange_rxn: "EX_glc__D_e"
+oxygen_exchange_rxn: "EX_o2_e"
+mu_fraction: 0.9
+
+p_total: [0.32, 0.435, 0.55]
+paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
+
+upper_threshold: 1.0e6
+lower_threshold: 1.0e-5
+
+sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"
+substrate_df: "data/processed/substrates/iml1515_substrates.csv"
+
+```
 
 ## Output Files
 
-The pipeline generates:
+Results are saved to `results/run_kapp_pipeline/{organism}_{date}_{id}/`:
 
-- **`iml1515_homomeric_kmax_{method}_variability.csv`**: Main results file containing:
-  - Maximum k<sub>app</sub> values for each enzyme-substrate pair
-  - η statistics (mean, standard deviation, CV)
-  - Metadata (genes, reactions, subsystems)
+```
+results/run_kapp_pipeline/ecoli_20251215_1634/
+├── data/                                        # Intermediate files (sequences and substrates)
+└── results/                                        # Final outputs
+    ├── kmax_ecoli_20251215_1634.csv                # Main results
+    ├── log_ecoli_20251215_1634.log                 # Detailed execution log
+    ├── FVA_bounds_ecoli_20251215_1634.csv          # FVA min/max bounds
+    ├── fluxomics_filtered_ecoli_20251215_1634.csv  # FVA-filtered fluxes
+    └── FVA_violations_ecoli_20251215_1634.csv      # Fluxes violating FVA
+```
+
+### Main Results File
+
+`kmax_{organism}_{date}_{id}.csv` contains:
+- Maximum k<sub>app</sub> values for each enzyme-substrate pair
+- η (saturation) statistics: mean, standard deviation, coefficient of variation
+- Metadata: genes, reactions, subsystems, sequences, SMILES
 
 
 ## Pipeline Steps
@@ -77,52 +148,79 @@ The automated pipeline performs the following steps:
 
 ## Troubleshooting
 
+### Command Not Found
+
+If `run-kapp-pipeline` is not recognized:
+1. Ensure you've run `pip install -e .` from the project root
+2. Check that your virtual environment is activated
+3. Use `python -m scripts.run_kapp_pipeline` as an alternative
+
 ### Import Errors
 
-If you see import errors for `enzyme_classifier` or `kapp_builder`, ensure:
-1. You're running the script from the `experiments/` directory
-2. The `scripts/` directory exists and contains the required modules
+If you see `ModuleNotFoundError`:
+```bash
+# Reinstall the package
+pip install -e .
+```
 
-### File Not Found Errors
+### Configuration Validation Errors
 
-- Check that all paths in `config.yaml` are relative to the `experiments/` directory
-- Verify that input files exist at the specified locations
+If you see "Model file not found" or similar errors:
+- **All paths in YAML must be relative to the project root**, not the YAML file location
 
-### Optimization
+### Solver Issues
 
-Large GEMs and pFBA most likely require full license solvers (CPLEX or Gurobi). glpk 
+- Large GEMs and pFBA require commercial solvers (CPLEX or Gurobi). Ensure your solver is properly licensed and accessible
+
+
 
 ## Advanced Usage
 
 ### Multiple Configurations
 
-You can create multiple config files for different analyses.
-
-Navigate to the main repo directory, and run:
+Create separate config files for different organisms or conditions:
 
 ```bash
-python scripts\run_kapp_pipeline.py configs\scripts\ecoli_homomeric.yaml
-python scripts\run_kapp_pipeline.py configs\scripts\pputida_homomeric.yaml
-python scripts\run_kapp_pipeline.py configs\scripts\bsubtilis_homomeric.yaml
+run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+run-kapp-pipeline configs/run_kapp_pipeline/pputida_homomeric.yaml
+run-kapp-pipeline configs/run_kapp_pipeline/yeast_homomeric.yaml
 ```
 
 ### Programmatic Usage
 
-You can also import and use the pipeline function directly:
+Import and use the pipeline function directly in Python scripts:
 
 ```python
-from run_kapp_pipeline import run_kapp_pipeline
+from pathlib import Path
+from src.config import PipelineConfig
+from scripts.run_kapp_pipeline import run_kapp_pipeline
 
-kapp_results, kmax_results = run_kapp_pipeline(
-    model_path="../",
+# Create configuration programmatically
+config = PipelineConfig(
+    organism="ecoli",
+    model_path=Path("data/raw/gems/iml1515.xml"),
+    solver="cplex",
     flux_method="pFBA",
     carbon_uptake=[2, 6, 10],
     oxygen_uptake=[15, 17.5, 20],
+    carbon_exchange_rxn="EX_glc__D_e",
+    oxygen_exchange_rxn="EX_o2_e",
     p_total=[0.32, 0.435, 0.55],
-    substrate_df="../",
-    sequence_df="../",
-    paxdb_path="../"
+    paxdb_path=Path("data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt")
+)
+
+# Set up output directories
+output_dir = Path("results/run_kapp_pipeline/my_run/results")
+data_dir = Path("results/run_kapp_pipeline/my_run/data")
+output_dir.mkdir(parents=True, exist_ok=True)
+data_dir.mkdir(parents=True, exist_ok=True)
+
+# Run pipeline
+kapp_results, kmax_results = run_kapp_pipeline(
+    config=config,
+    output_dir=output_dir,
+    data_dir=data_dir,
+    run_name="my_run"
 )
 ```
-
 
