@@ -1,5 +1,5 @@
-'''
-The following functions in this file are attributed to KinGEMs: 
+"""
+The following functions in this file are attributed to kinGEMs: 
 - load_model  
 - get_substrate_metabolites
 - map_metabolites
@@ -7,7 +7,7 @@ The following functions in this file are attributed to KinGEMs:
 - get_SMILES_from_cactus
 - get_PubChem_SMILES
 - clean_metabolite_names
-'''
+"""
 
 import logging
 import os

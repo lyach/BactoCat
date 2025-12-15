@@ -47,13 +47,11 @@ venv.bak/
 Thumbs.db 
 
 # Folders
-misc/discarded/*
-misc/external databases/
-data/final
-notebooks/
-notebooks/results/
-scripts/runs/
-data/external_databases/*
+misc/*
+notebooks/*
+data/external_databases/
+results/*
+
 # Cache files
 cache/
 

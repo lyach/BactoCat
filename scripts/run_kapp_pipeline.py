@@ -5,6 +5,25 @@ import sys
 import yaml
 from pathlib import Path
 
+# Add project root to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+# Module imports
+from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
+from src.gene_sequence_mapper import map_organism_to_uniprot
+from src.substrate_mapper import get_substrate_df
+from src.kapp_builder import (
+    create_fluxomics_dataframe,
+    create_enzyme_info_dataframe,
+    process_enzyme_protein_mapping,
+    create_FVA_dataframe, 
+    FVA_integration,
+    calculate_kapp_homomeric,
+    evaluate_kapp_homomeric,
+    get_kmax_homomeric,
+    get_eta
+)
+
 # Class to save console outputs
 class Tee(object):
     def __init__(self, *files):
@@ -17,23 +36,6 @@ class Tee(object):
         for f in self.files:
             f.flush()
 
-# Add project root to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-# Module imports
-from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
-# from src.gene_sequence_mapper import map_gem_genes_to_uniprot
-# from src.substrate_mapper import get_substrate_df
-from src.kapp_builder import (
-    create_fluxomics_dataframe,
-    create_enzyme_info_dataframe,
-    process_enzyme_protein_mapping,
-    calculate_kapp_homomeric,
-    evaluate_kapp_homomeric,
-    get_kmax_homomeric,
-    get_eta
-)
-
 def run_kapp_pipeline(organism: str,
                       model_path: str,
                       flux_method: str, 
@@ -45,7 +47,8 @@ def run_kapp_pipeline(organism: str,
                       paxdb_path: str = None,
                       solver: str = "cplex",
                       output_dir: str = None,
-                      data_dir: str = None
+                      data_dir: str = None,
+                      run_name: str = None
                       ):
     """
     Run the kapp pipeline.
@@ -72,7 +75,11 @@ def run_kapp_pipeline(organism: str,
         solver: str, optional
             Solver for the flux simulations. Default is 'cplex'.
         output_dir: str, optional
-            Directory to save output files. Default is scripts/results/
+            Directory to save output files.
+        data_dir: str, optional
+            Directory to save intermediate data files.
+        run_name: str, optional
+            Name for the run (used in output file names).
     
     Returns:
         tuple: (kapp_dfs_eta, kmax_dfs_eta_var)
@@ -117,7 +124,6 @@ def run_kapp_pipeline(organism: str,
     print(f"Reactions with GPR: {stats['reactions_with_gpr']}")
     print(f"Total genes: {stats['total_genes']}")
     print(f"GPR cases: {stats['gpr_complexity']}")
-    df_enzymes.head()
     
     # ==== 2. Get fluxomics simulations ====
     print(f"\n==== STEP 2. Run {flux_method} fluxomics simulations ====")
@@ -126,8 +132,6 @@ def run_kapp_pipeline(organism: str,
                                          oxygen_uptake=oxygen_uptake)
     
     # ==== 3. Get flux variability analysis ====
-    from src.kapp_builder import create_FVA_dataframe, FVA_integration
-
     print("\n==== STEP 3. Run flux variability analysis ====")
     
     try:
@@ -148,9 +152,9 @@ def run_kapp_pipeline(organism: str,
         fluxomics_df = filtered_fluxomics_df.copy()
 
         # Save outputs for reference
-        fva_df.to_csv(output_dir / "FVA_bounds.csv", index=False)
-        filtered_fluxomics_df.to_csv(output_dir / "fluxomics_filtered.csv", index=False)
-        violations_df.to_csv(output_dir / "FVA_violations.csv", index=False)
+        fva_df.to_csv(output_dir / f"FVA_bounds_{run_name}.csv", index=False)
+        filtered_fluxomics_df.to_csv(output_dir / f"fluxomics_filtered_{run_name}.csv", index=False)
+        violations_df.to_csv(output_dir / f"FVA_violations_{run_name}.csv", index=False)
 
         print(f"FVA integration complete. Filtered fluxomics: {filtered_fluxomics_df.shape[0]} rows")
         print(f"Violations detected: {violations_df.shape[0]} rows")
@@ -159,7 +163,6 @@ def run_kapp_pipeline(organism: str,
 
     
     # ==== 4. Get sequence information ====
-    from src.gene_sequence_mapper import map_organism_to_uniprot
     print("\n==== STEP 4. Load sequence information ====")
     if sequence_df:
         try:
@@ -170,26 +173,23 @@ def run_kapp_pipeline(organism: str,
     else: 
         print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
         sequence_df_loaded = map_organism_to_uniprot(organism)
+        sequence_df_loaded.to_csv(data_dir / f"{organism}_uniprot_seqs.csv", index=False)
+        print(f"Sequence dataframe created: {len(sequence_df_loaded)} rows at {data_dir / f'{organism}_uniprot_seqs.csv'}")
 
-    sequence_df_loaded.to_csv(data_dir / "sequence_df.csv", index=False)
-
-        
 
     # ==== 5. Get substrate information ====
     print("\n==== STEP 5. Load substrate information ====")
-    from src.substrate_mapper import get_substrate_df 
     if substrate_df:
          try:
              substrate_df_loaded = pd.read_csv(substrate_df)
-         except:
+         except Exception as e:
              raise ValueError(f"Substrate dataframe not found at {substrate_df}. Error: {e}")
     else:
          print("No substrate dataframe provided, generating from model.")
          substrate_df_loaded = get_substrate_df(model)
-
-    substrate_df_loaded.to_csv(data_dir / "substrate_df.csv", index=False)
-    print(f"Substrate dataframe created: {len(substrate_df_loaded)} rows at {data_dir / 'substrate_df.csv'}")
-
+         substrate_df_loaded.to_csv(data_dir / f"{organism}_substrate_df.csv", index=False)
+         print(f"Substrate dataframe created: {len(substrate_df_loaded)} rows at {data_dir / f'{organism}_substrate_df.csv'}")
+    
     
     # ==== 6. Create enzyme information dataframe ====
     print("\n==== STEP 6. Create enzyme information dataframe ====")
@@ -217,7 +217,8 @@ def run_kapp_pipeline(organism: str,
     
     # ==== 12. Save the results ====
     print("\n==== STEP 12. Save results ====")
-    output_file = output_dir / f"iml1515_homomeric_kmax_{flux_method}_variability.csv"
+    filename = f"kmax_{run_name}.csv"
+    output_file = output_dir / filename
     kmax_dfs_eta_var.to_csv(output_file, index=False)
     print(f"Results saved to: {output_file}")
     
@@ -233,6 +234,8 @@ def main():
     Main function to run the pipeline from command line with config file.
     """
     import argparse
+    from datetime import datetime
+    import random
     
     # Set up argument parser
     parser = argparse.ArgumentParser(
@@ -241,10 +244,9 @@ def main():
         epilog="""
         Example usage:
         python run_kapp_pipeline.py config.yaml
-        python run_kapp_pipeline.py config.yaml --output-dir my_custom_run
         
-        Note: Output will be saved to scripts/runs/{run_name}/
-        with subdirectories /data and /runs
+        Note: Output will be saved to results/run_kapp_pipeline/{organism}_{date}_{random_number}/
+        with subdirectories /data and /results
         """
     )
     
@@ -254,12 +256,7 @@ def main():
         help='Path to YAML configuration file'
     )
     
-    parser.add_argument(
-        '--output-dir',
-        type=str,
-        default=None,
-        help='Override run name (subfolder under scripts/runs/) from config file'
-    )
+    # Note: output directory is now auto-generated with timestamp and removed from arguments
     
     args = parser.parse_args()
     
@@ -288,15 +285,7 @@ def main():
         paxdb_path = script_dir / config['paxdb_path']
         solver = config.get('solver', 'cplex')  # Default to 'cplex' if not specified
         
-        # Get run name for output directory structure
-        if args.output_dir:
-            run_name = args.output_dir
-        elif 'run_name' in config:
-            run_name = config['run_name']
-        elif 'output_dir' in config:
-            run_name = Path(config['output_dir']).name
-        else:
-            run_name = f"{organism}_results"
+        # Note: run_name is now auto-generated with timestamp in the output directory setup
             
         # Optional parameters
         raw_substrate_df = config.get('substrate_df')
@@ -308,19 +297,26 @@ def main():
         sys.exit(1)
         
     # Resolve output directory structure
-    results_base = script_dir / "runs"
-    # Run-specific directory under results/
-    run_root = results_base / run_name
+    # Create timestamped run name: {organism}_{date}_{random_number}
+    current_date = datetime.now().strftime("%Y%m%d")
+    random_num = random.randint(1000, 9999)
+    timestamped_run_name = f"{organism}_{current_date}_{random_num}"
     
-    # Define and create the structured subdirectories
-    output_dir = run_root / "results"  # Where config, logs, and final outputs go
-    data_dir = run_root / "data"       # Where intermediate data (sequence_df, FVA) goes
+    # Set base to project root's results/run_kapp_pipeline/
+    project_root = script_dir.parent  # Go up from scripts/ to project root
+    results_base = project_root / "results" / "run_kapp_pipeline"
+    
+    # Run-specific directory under results/run_kapp_pipeline/
+    run_root = results_base / timestamped_run_name
+    # Create the subdirectories
+    output_dir = run_root / "results"  # Where logs and final outputs go
+    data_dir = run_root / "data"       # For intermediate data (FVA) goes
 
     # Create directories if they don't exist
     output_dir.mkdir(parents=True, exist_ok=True)
     data_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Output directory set to: {output_dir.relative_to(script_dir).as_posix()}")
-    print(f"Data directory set to: {data_dir.relative_to(script_dir).as_posix()}")
+    print(f"Output directory set to: {output_dir.relative_to(project_root).as_posix()}")
+    print(f"Data directory set to: {data_dir.relative_to(project_root).as_posix()}")
 
     # Helper lambda to safely format the path for logging
     path_to_log = lambda p: p.relative_to(script_dir).as_posix() if p else 'Auto-generated'
@@ -330,7 +326,7 @@ def main():
         f"\n{'='*60}",
         "KAPP PIPELINE CONFIGURATION",
         f"{'='*60}",
-        f" Run name: {run_name}",
+        f" Run name: {timestamped_run_name}",
         f" Organism: {organism}",
         f" Model: {model_path.relative_to(script_dir).as_posix()}",
         f" Flux method: {flux_method}",
@@ -341,14 +337,14 @@ def main():
         f" Substrate data: {path_to_log(substrate_df)}",
         f" Sequence data: {path_to_log(sequence_df)}",
         f" PaxDB data: {paxdb_path.relative_to(script_dir).as_posix()}",
-        f" Data directory: {data_dir.relative_to(script_dir).as_posix()}",
-        f" Results directory: {output_dir.relative_to(script_dir).as_posix()}",
+        f" Data directory: {data_dir.relative_to(project_root).as_posix()}",
+        f" Results directory: {output_dir.relative_to(project_root).as_posix()}",
         f"{'='*60}\n"
     ]
     config_text = "\n".join(config_lines)
     print(config_text)
     
-    config_filepath = output_dir / f"kmax_homomeric_{organism}.txt"
+    config_filepath = output_dir / f"log_{timestamped_run_name}.txt"
     with open(config_filepath, 'w', encoding='utf-8') as f:
         f.write(config_text)
     
@@ -358,7 +354,7 @@ def main():
         sys.stdout = Tee(sys.stdout, log_file)
         
         try:
-            print(f"\nConfiguration saved to {config_filepath.relative_to(script_dir).as_posix()}")
+            print(f"\nConfiguration saved to {config_filepath.relative_to(project_root).as_posix()}")
 
             # Run the pipeline
             kapp_results, kmax_results = run_kapp_pipeline(
@@ -373,7 +369,8 @@ def main():
                 paxdb_path=paxdb_path,
                 solver=solver,
                 output_dir=output_dir,
-                data_dir=data_dir
+                data_dir=data_dir,
+                run_name=timestamped_run_name
             )
             
             print("\nPipeline execution completed successfully!")
