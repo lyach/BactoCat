@@ -19,24 +19,38 @@ from cobra.io import read_sbml_model
 from src.FVA_analysis.utils import cobra_to_fva_problem
 
 
-def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model, 
-                              carbon_uptake: list, oxygen_uptake: list):
+def create_fluxomics_dataframe(
+    flux_method: str,
+    GEM: cobra.Model,
+    carbon_uptake: list,
+    oxygen_uptake: list,
+    carbon_exchange_rxn: str = "EX_glc__D_e",
+    oxygen_exchange_rxn: str = "EX_o2_e",
+):
     """
     Create a dataframe with FBA or pFBA fluxomics for all combinations of carbon and oxygen uptake.
     
-    Parameters:
-        flux_method: str
-            Method for the flux simulations: 'FBA' or 'pFBA'
-        GEM: cobra.Model
-            The GEM model to perform flux analysis on
-        carbon_uptake: list
-            List of carbon uptake rates to test
-        oxygen_uptake: list
-            List of oxygen uptake rates to test
+    Parameters
+    ----------
+    flux_method : str
+        Method for the flux simulations: 'FBA' or 'pFBA'
+    GEM : cobra.Model
+        The GEM model to perform flux analysis on
+    carbon_uptake : list
+        List of carbon uptake rates to test (mmol/gDW/h)
+    oxygen_uptake : list
+        List of oxygen uptake rates to test (mmol/gDW/h)
+    carbon_exchange_rxn : str, optional
+        Reaction ID for carbon exchange (default: 'EX_glc__D_e')
+    oxygen_exchange_rxn : str, optional
+        Reaction ID for oxygen exchange (default: 'EX_o2_e')
     
-    Returns:
-        pd.DataFrame: DataFrame with columns: 'rxn_id', 'flux_cond1', 'flux_cond2', ..., 'flux_condN'
+    Returns
+    -------
+    pd.DataFrame
+        DataFrame with columns: 'rxn_id', 'flux_cond1', 'flux_cond2', ..., 'flux_condN'
     """
+    from loguru import logger
     
     # Create all combinations of carbon and oxygen uptake rates
     uptake_combinations = list(product(carbon_uptake, oxygen_uptake))
@@ -49,24 +63,24 @@ def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model,
     
     # Process each combination
     for i, (carbon_rate, oxygen_rate) in enumerate(uptake_combinations, 1):
-        print(f"Processing condition {i}: Carbon={carbon_rate}, Oxygen={oxygen_rate}")
+        logger.debug(f"Processing condition {i}: Carbon={carbon_rate}, Oxygen={oxygen_rate}")
         
         # Create a copy of the model to avoid modifying the original
         model_copy = GEM.copy()
         
         # Set carbon uptake rate
         try:
-            carbon_rxn = model_copy.reactions.get_by_id('EX_glc__D_e')  # TO DO - add input param to specify the carbon uptake reaction
+            carbon_rxn = model_copy.reactions.get_by_id(carbon_exchange_rxn)
             carbon_rxn.lower_bound = -abs(carbon_rate)  # Negative for uptake
         except KeyError:
-            print("Warning: Carbon uptake reaction not found. Skipping carbon constraint.")
+            logger.warning(f"Carbon uptake reaction '{carbon_exchange_rxn}' not found. Skipping carbon constraint.")
         
         # Set oxygen uptake rate
         try:
-            oxygen_rxn = model_copy.reactions.get_by_id('EX_o2_e')  # TO DO - add input param to specify the oxygen uptake reaction
+            oxygen_rxn = model_copy.reactions.get_by_id(oxygen_exchange_rxn)
             oxygen_rxn.lower_bound = -abs(oxygen_rate)  # Negative for uptake
         except KeyError:
-            print("Warning: Oxygen uptake reaction not found. Skipping oxygen constraint.")
+            logger.warning(f"Oxygen uptake reaction '{oxygen_exchange_rxn}' not found. Skipping oxygen constraint.")
         
         # Run FBA or pFBA
         if flux_method == 'FBA':
@@ -79,9 +93,9 @@ def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model,
         # Store results
         if solution.status == 'optimal':
             flux_results[f'flux_cond{i}'] = [solution.fluxes[rxn_id] for rxn_id in rxn_ids]
-            print(f"Condition {i} completed successfully")
+            logger.debug(f"Condition {i} completed successfully")
         else:
-            print(f"Warning: Condition {i} optimization failed with status: {solution.status}")
+            logger.warning(f"Condition {i} optimization failed with status: {solution.status}")
             flux_results[f'flux_cond{i}'] = [0.0] * len(rxn_ids)  # Fill with zeros for failed optimization
     
     # Create the output dataframe
@@ -91,14 +105,18 @@ def create_fluxomics_dataframe(flux_method: str, GEM: cobra.Model,
     for condition, fluxes in flux_results.items():
         fluxomics_df[condition] = fluxes
     
-    print(f"Fluxomics dataframe created with {len(uptake_combinations)} conditions")
+    logger.info(f"Fluxomics dataframe created with {len(uptake_combinations)} conditions")
     return fluxomics_df
 
-def create_FVA_dataframe(GEM_path: str, 
-                                        carbon_uptake: list, 
-                                        oxygen_uptake: list,
-                                        mu_fraction: float = 0.9,
-                                        solver: str = 'cplex'):
+def create_FVA_dataframe(
+    GEM_path: str,
+    carbon_uptake: list,
+    oxygen_uptake: list,
+    mu_fraction: float = 0.9,
+    solver: str = 'cplex',
+    carbon_exchange_rxn: str = "EX_glc__D_e",
+    oxygen_exchange_rxn: str = "EX_o2_e",
+):
     """
     Run FVA for all combinations of carbon and oxygen uptake rates, 
     matching the structure of create_fluxomics_dataframe().
@@ -108,11 +126,17 @@ def create_FVA_dataframe(GEM_path: str,
     GEM_path : str
         Path to the SBML model file (XML).
     carbon_uptake : list
-        List of carbon uptake rates to test.
+        List of carbon uptake rates to test (mmol/gDW/h).
     oxygen_uptake : list
-        List of oxygen uptake rates to test.
+        List of oxygen uptake rates to test (mmol/gDW/h).
     mu_fraction : float, optional
         Fraction of optimal growth rate for FVA (default = 0.9).
+    solver : str, optional
+        Solver to use ('cplex' or 'gurobi'). Default is 'cplex'.
+    carbon_exchange_rxn : str, optional
+        Reaction ID for carbon exchange (default: 'EX_glc__D_e').
+    oxygen_exchange_rxn : str, optional
+        Reaction ID for oxygen exchange (default: 'EX_o2_e').
     
     Returns
     -------
@@ -120,6 +144,7 @@ def create_FVA_dataframe(GEM_path: str,
         Combined FVA dataframe with columns:
         ['rxn_id', 'FVA_lower_cond1', 'FVA_upper_cond1', ..., 'FVA_lower_condN', 'FVA_upper_condN']
     """
+    from loguru import logger
     
     # Conditionally import the correct FVA solver
     if solver.lower() == 'cplex':
@@ -141,25 +166,27 @@ def create_FVA_dataframe(GEM_path: str,
     FVA_upper_results = {}
     
     for i, (carbon_rate, oxygen_rate) in enumerate(uptake_combinations, 1):
-        print(f"Running FVA condition {i}: Carbon={carbon_rate}, Oxygen={oxygen_rate}")
+        logger.debug(f"Running FVA condition {i}: Carbon={carbon_rate}, Oxygen={oxygen_rate}")
         
         # Copy model to avoid media interference
         model_copy = base_model.copy()
         
         # Set medium
         try:
-            model_copy.reactions.EX_glc__D_e.lower_bound = -abs(carbon_rate)
+            carbon_rxn = model_copy.reactions.get_by_id(carbon_exchange_rxn)
+            carbon_rxn.lower_bound = -abs(carbon_rate)
         except KeyError:
-            print("Warning: Carbon uptake reaction not found. Skipping.")
+            logger.warning(f"Carbon uptake reaction '{carbon_exchange_rxn}' not found. Skipping.")
         try:
-            model_copy.reactions.EX_o2_e.lower_bound = -abs(oxygen_rate)
+            oxygen_rxn = model_copy.reactions.get_by_id(oxygen_exchange_rxn)
+            oxygen_rxn.lower_bound = -abs(oxygen_rate)
         except KeyError:
-            print("Warning: Oxygen uptake reaction not found. Skipping.")
+            logger.warning(f"Oxygen uptake reaction '{oxygen_exchange_rxn}' not found. Skipping.")
         
         # Optimize and get optimal mu
         solution = model_copy.optimize()
         if solution.status != 'optimal':
-            print(f"Warning: optimization failed at condition {i} with status:({solution.status}), filling with NaNs.")
+            logger.warning(f"Optimization failed at condition {i} with status: {solution.status}, filling with NaNs.")
             FVA_lower_results[f'FVA_lower_cond{i}'] = [float('nan')] * len(rxn_ids)
             FVA_upper_results[f'FVA_upper_cond{i}'] = [float('nan')] * len(rxn_ids)
             continue
@@ -171,17 +198,17 @@ def create_FVA_dataframe(GEM_path: str,
         fva_results = fva_solve_faster(problem)
         rxn_ids = [rxn.id for rxn in model_copy.reactions]
         fva_df = pd.DataFrame({
-        'rxn_id': [rxn.id for rxn in model_copy.reactions],
-        'FVA_lower': fva_results.lower_bound,
-        'FVA_upper': fva_results.upper_bound
-    }) 
+            'rxn_id': [rxn.id for rxn in model_copy.reactions],
+            'FVA_lower': fva_results.lower_bound,
+            'FVA_upper': fva_results.upper_bound
+        }) 
         fva_df = fva_df.set_index('rxn_id').reindex(rxn_ids).reset_index()
         
         # Store FVA lower/upper bounds
         FVA_lower_results[f'FVA_lower_cond{i}'] = fva_df['FVA_lower'].values
         FVA_upper_results[f'FVA_upper_cond{i}'] = fva_df['FVA_upper'].values
         
-        print(f"Condition {i} completed successfully.")
+        logger.debug(f"Condition {i} completed successfully.")
     
     # Build the output dataframe
     fva_combined = pd.DataFrame({'rxn_id': rxn_ids})
@@ -191,7 +218,7 @@ def create_FVA_dataframe(GEM_path: str,
     for col_name, values in FVA_upper_results.items():
         fva_combined[col_name] = values
     
-    print(f"FVA dataframe created with {len(uptake_combinations)} conditions.")
+    logger.info(f"FVA dataframe created with {len(uptake_combinations)} conditions.")
     return fva_combined
 
 

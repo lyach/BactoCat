@@ -1,14 +1,26 @@
-import pandas as pd
-import cobra
-import os
+"""
+BactoCat Kapp Pipeline Runner.
+
+This script runs the kapp pipeline for building enzyme kinetic datasets
+from genome-scale metabolic models.
+
+Usage:
+    run-kapp-pipeline config.yaml
+    python -m scripts.run_kapp_pipeline config.yaml
+"""
+
+import argparse
 import sys
-import yaml
+from datetime import datetime
 from pathlib import Path
+import random
 
-# Add project root to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import cobra
+import pandas as pd
+from loguru import logger
 
-# Module imports
+# Module imports (no sys.path hack needed when package is installed)
+from src.config import PipelineConfig, load_config, PROJ_ROOT, ensure_dir_exists
 from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
 from src.gene_sequence_mapper import map_organism_to_uniprot
 from src.substrate_mapper import get_substrate_df
@@ -16,373 +28,346 @@ from src.kapp_builder import (
     create_fluxomics_dataframe,
     create_enzyme_info_dataframe,
     process_enzyme_protein_mapping,
-    create_FVA_dataframe, 
+    create_FVA_dataframe,
     FVA_integration,
     calculate_kapp_homomeric,
     evaluate_kapp_homomeric,
     get_kmax_homomeric,
-    get_eta
+    get_eta,
 )
 
-# Class to save console outputs
-class Tee(object):
-    def __init__(self, *files):
-        self.files = files
-    def write(self, obj):
-        for f in self.files:
-            f.write(str(obj))
-            f.flush()
-    def flush(self):
-        for f in self.files:
-            f.flush()
 
-def run_kapp_pipeline(organism: str,
-                      model_path: str,
-                      flux_method: str, 
-                      carbon_uptake: list, 
-                      oxygen_uptake: list, 
-                      p_total: list,
-                      substrate_df: str = None,
-                      sequence_df: str = None,
-                      paxdb_path: str = None,
-                      solver: str = "cplex",
-                      output_dir: str = None,
-                      data_dir: str = None,
-                      run_name: str = None
-                      ):
+def setup_logging(log_file: Path, run_name: str) -> None:
+    """
+    Configure loguru for console and file output.
+    
+    Parameters
+    ----------
+    log_file : Path
+        Path to the log file
+    run_name : str
+        Name of the run (for log formatting)
+    """
+    # Remove default handler
+    logger.remove()
+    
+    # Console handler with colored output
+    logger.add(
+        sys.stderr,
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+        level="INFO",
+        colorize=True,
+    )
+    
+    # File handler with full details
+    logger.add(
+        log_file,
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+        level="DEBUG",
+        rotation="10 MB",
+        retention="30 days",
+    )
+    
+    logger.info(f"Logging initialized for run: {run_name}")
+
+
+def run_kapp_pipeline(
+    config: PipelineConfig,
+    output_dir: Path,
+    data_dir: Path,
+    run_name: str,
+) -> tuple[dict, pd.DataFrame]:
     """
     Run the kapp pipeline.
     
-    Parameters:
-        organism: str
-            Organism name.
-        model_path: str
-            Path to the model XML file.
-        flux_method: str
-            Method for the flux simulations: 'FBA' or 'pFBA'.
-        carbon_uptake: list
-            List of carbon uptake rates to test.
-        oxygen_uptake: list
-            List of oxygen uptake rates to test.
-        p_total: list
-            List of p_total values to test.
-        substrate_df: str
-            Path to substrate dataframe CSV file.
-        sequence_df: str
-            Path to sequence dataframe CSV file.
-        paxdb_path: str
-            Path to PaxDB proteomics data file.
-        solver: str, optional
-            Solver for the flux simulations. Default is 'cplex'.
-        output_dir: str, optional
-            Directory to save output files.
-        data_dir: str, optional
-            Directory to save intermediate data files.
-        run_name: str, optional
-            Name for the run (used in output file names).
-    
-    Returns:
-        tuple: (kapp_dfs_eta, kmax_dfs_eta_var)
-            - kapp_dfs_eta: dict of kapp dataframes with eta values
-            - kmax_dfs_eta_var: DataFrame with kmax values and variance metrics
+    Parameters
+    ----------
+    config : PipelineConfig
+        Validated pipeline configuration
+    output_dir : Path
+        Directory for output files
+    data_dir : Path
+        Directory for intermediate data files
+    run_name : str
+        Name for this run (used in file names)
+        
+    Returns
+    -------
+    tuple
+        (kapp_dfs_eta, kmax_dfs_eta_var)
+        - kapp_dfs_eta: dict of kapp DataFrames with eta values
+        - kmax_dfs_eta_var: DataFrame with kmax values and variance metrics
     """
     # Set solver
     try:
-        cobra.Configuration().solver = solver
-        print(f"Solver set to {solver}")
+        cobra.Configuration().solver = config.solver
+        logger.info(f"Solver set to {config.solver}")
     except Exception as e:
         raise ValueError(f"Error setting solver: {e}")
     
-    
     # Load the model
     try:
-        model = cobra.io.read_sbml_model(model_path)
+        model = cobra.io.read_sbml_model(str(config.model_path))
         model = model.copy()
-        print(f"Model loaded successfully from {model_path}")
+        logger.info(f"Model loaded successfully from {config.model_path.name}")
         
-        # Solver tolerance settings
+        # Log solver tolerance settings
         try:
             solver_instance = model.solver
             if hasattr(solver_instance, 'configuration') and hasattr(solver_instance.configuration, 'tolerances'):
                 tolerances = solver_instance.configuration.tolerances
-                print(f"Feasibility Tolerance: {tolerances.feasibility}")
-                print(f"Optimality Tolerance:  {tolerances.optimality}")
-                print(f"Integrality Tolerance: {tolerances.integrality}")
+                logger.debug(f"Feasibility Tolerance: {tolerances.feasibility}")
+                logger.debug(f"Optimality Tolerance: {tolerances.optimality}")
+                logger.debug(f"Integrality Tolerance: {tolerances.integrality}")
         except Exception:
-            print("Note: Solver tolerance information not available")
+            logger.debug("Solver tolerance information not available")
     except Exception as e:
-        raise ValueError(f"Model not found at {model_path}. Error: {e}")
+        raise ValueError(f"Model not found at {config.model_path}. Error: {e}")
     
-    # ==== 1. Create GEM enzymes dataframe ====
-    print("\n==== STEP 1. Create GEM enzymes dataframe ====")
+    # ==== STEP 1: Create GEM enzymes dataframe ====
+    logger.info("=" * 50)
+    logger.info("STEP 1: Create GEM enzymes dataframe")
     df_enzymes = create_gpr_dataframe(model)
     
-    # Prints
     stats = analyze_model_gprs(model)
-    print("Model Stats:")
-    print(f"Total reactions: {stats['total_reactions']}")
-    print(f"Reactions with GPR: {stats['reactions_with_gpr']}")
-    print(f"Total genes: {stats['total_genes']}")
-    print(f"GPR cases: {stats['gpr_complexity']}")
+    logger.info(f"Total reactions: {stats['total_reactions']}")
+    logger.info(f"Reactions with GPR: {stats['reactions_with_gpr']}")
+    logger.info(f"Total genes: {stats['total_genes']}")
+    logger.debug(f"GPR cases: {stats['gpr_complexity']}")
     
-    # ==== 2. Get fluxomics simulations ====
-    print(f"\n==== STEP 2. Run {flux_method} fluxomics simulations ====")
-    fluxomics_df = create_fluxomics_dataframe(flux_method=flux_method, GEM=model, 
-                                         carbon_uptake=carbon_uptake, 
-                                         oxygen_uptake=oxygen_uptake)
+    # ==== STEP 2: Run fluxomics simulations ====
+    logger.info("=" * 50)
+    logger.info(f"STEP 2: Run {config.flux_method} fluxomics simulations")
+    fluxomics_df = create_fluxomics_dataframe(
+        flux_method=config.flux_method,
+        GEM=model,
+        carbon_uptake=config.carbon_uptake,
+        oxygen_uptake=config.oxygen_uptake,
+        carbon_exchange_rxn=config.carbon_exchange_rxn,
+        oxygen_exchange_rxn=config.oxygen_exchange_rxn,
+    )
     
-    # ==== 3. Get flux variability analysis ====
-    print("\n==== STEP 3. Run flux variability analysis ====")
+    # ==== STEP 3: Run flux variability analysis ====
+    logger.info("=" * 50)
+    logger.info("STEP 3: Run flux variability analysis")
     
     try:
         fva_df = create_FVA_dataframe(
-            GEM_path=model_path,
-            carbon_uptake=carbon_uptake,
-            oxygen_uptake=oxygen_uptake,
-            mu_fraction=0.9,
-            solver=solver
+            GEM_path=str(config.model_path),
+            carbon_uptake=config.carbon_uptake,
+            oxygen_uptake=config.oxygen_uptake,
+            mu_fraction=config.mu_fraction,
+            solver=config.solver,
+            carbon_exchange_rxn=config.carbon_exchange_rxn,
+            oxygen_exchange_rxn=config.oxygen_exchange_rxn,
         )
-        print("FVA dataframe created successfully.")
+        logger.info("FVA dataframe created successfully")
     except Exception as e:
-        raise RuntimeError(f"Error creating FVA dataframe: {e}") 
+        raise RuntimeError(f"Error creating FVA dataframe: {e}")
     
-    print("\nIntegrating FVA results with fluxomics data...")
+    logger.info("Integrating FVA results with fluxomics data...")
     try:
         filtered_fluxomics_df, violations_df = FVA_integration(fluxomics_df, fva_df, filter=True)
         fluxomics_df = filtered_fluxomics_df.copy()
-
-        # Save outputs for reference
+        
+        # Save outputs
         fva_df.to_csv(output_dir / f"FVA_bounds_{run_name}.csv", index=False)
         filtered_fluxomics_df.to_csv(output_dir / f"fluxomics_filtered_{run_name}.csv", index=False)
         violations_df.to_csv(output_dir / f"FVA_violations_{run_name}.csv", index=False)
-
-        print(f"FVA integration complete. Filtered fluxomics: {filtered_fluxomics_df.shape[0]} rows")
-        print(f"Violations detected: {violations_df.shape[0]} rows")
+        
+        logger.info(f"FVA integration complete. Filtered fluxomics: {filtered_fluxomics_df.shape[0]} rows")
+        logger.info(f"Violations detected: {violations_df.shape[0]} rows")
     except Exception as e:
         raise RuntimeError(f"Error during FVA integration: {e}")
-
     
-    # ==== 4. Get sequence information ====
-    print("\n==== STEP 4. Load sequence information ====")
-    if sequence_df:
+    # ==== STEP 4: Load sequence information ====
+    logger.info("=" * 50)
+    logger.info("STEP 4: Load sequence information")
+    
+    if config.sequence_df and config.sequence_df.exists():
         try:
-            sequence_df_loaded = pd.read_csv(sequence_df)
-            print(f"Sequence dataframe loaded: {len(sequence_df_loaded)} rows")
+            sequence_df_loaded = pd.read_csv(config.sequence_df)
+            logger.info(f"Sequence dataframe loaded: {len(sequence_df_loaded)} rows")
         except Exception as e:
-            raise ValueError(f"Sequence dataframe not found at {sequence_df}. Error: {e}")
-    else: 
-        print(f"No sequence dataframe provided, retrieving sequences from UniProt.")
-        sequence_df_loaded = map_organism_to_uniprot(organism)
-        sequence_df_loaded.to_csv(data_dir / f"{organism}_uniprot_seqs.csv", index=False)
-        print(f"Sequence dataframe created: {len(sequence_df_loaded)} rows at {data_dir / f'{organism}_uniprot_seqs.csv'}")
-
-
-    # ==== 5. Get substrate information ====
-    print("\n==== STEP 5. Load substrate information ====")
-    if substrate_df:
-         try:
-             substrate_df_loaded = pd.read_csv(substrate_df)
-         except Exception as e:
-             raise ValueError(f"Substrate dataframe not found at {substrate_df}. Error: {e}")
+            raise ValueError(f"Sequence dataframe not found at {config.sequence_df}. Error: {e}")
     else:
-         print("No substrate dataframe provided, generating from model.")
-         substrate_df_loaded = get_substrate_df(model)
-         substrate_df_loaded.to_csv(data_dir / f"{organism}_substrate_df.csv", index=False)
-         print(f"Substrate dataframe created: {len(substrate_df_loaded)} rows at {data_dir / f'{organism}_substrate_df.csv'}")
+        logger.info("No sequence dataframe provided, retrieving sequences from UniProt")
+        sequence_df_loaded = map_organism_to_uniprot(config.organism)
+        seq_output = data_dir / f"{config.organism}_uniprot_seqs.csv"
+        sequence_df_loaded.to_csv(seq_output, index=False)
+        logger.info(f"Sequence dataframe created: {len(sequence_df_loaded)} rows at {seq_output.name}")
     
+    # ==== STEP 5: Load substrate information ====
+    logger.info("=" * 50)
+    logger.info("STEP 5: Load substrate information")
     
-    # ==== 6. Create enzyme information dataframe ====
-    print("\n==== STEP 6. Create enzyme information dataframe ====")
-    enzymes_info_dfs = create_enzyme_info_dataframe(df_enzymes, fluxomics_df, substrate_df_loaded, sequence_df_loaded)
+    if config.substrate_df and config.substrate_df.exists():
+        try:
+            substrate_df_loaded = pd.read_csv(config.substrate_df)
+            logger.info(f"Substrate dataframe loaded: {len(substrate_df_loaded)} rows")
+        except Exception as e:
+            raise ValueError(f"Substrate dataframe not found at {config.substrate_df}. Error: {e}")
+    else:
+        logger.info("No substrate dataframe provided, generating from model")
+        substrate_df_loaded = get_substrate_df(model)
+        sub_output = data_dir / f"{config.organism}_substrate_df.csv"
+        substrate_df_loaded.to_csv(sub_output, index=False)
+        logger.info(f"Substrate dataframe created: {len(substrate_df_loaded)} rows at {sub_output.name}")
     
-    # === 7. Map proteomics information ====
-    print("\n==== STEP 7. Map proteomics information ====")
-    enzyme_protein_info_dfs = process_enzyme_protein_mapping(enzymes_info_dfs, paxdb_path, p_total=p_total)
+    # ==== STEP 6: Create enzyme information dataframe ====
+    logger.info("=" * 50)
+    logger.info("STEP 6: Create enzyme information dataframe")
+    enzymes_info_dfs = create_enzyme_info_dataframe(
+        df_enzymes, fluxomics_df, substrate_df_loaded, sequence_df_loaded
+    )
     
-    # ==== 8. Calculate kapp for homomeric enzymes ====
-    print("\n==== STEP 8. Calculate kapp for homomeric enzymes ====")
+    # ==== STEP 7: Map proteomics information ====
+    logger.info("=" * 50)
+    logger.info("STEP 7: Map proteomics information")
+    enzyme_protein_info_dfs = process_enzyme_protein_mapping(
+        enzymes_info_dfs, str(config.paxdb_path), p_total=config.p_total
+    )
+    
+    # ==== STEP 8: Calculate kapp for homomeric enzymes ====
+    logger.info("=" * 50)
+    logger.info("STEP 8: Calculate kapp for homomeric enzymes")
     kapp_dfs = calculate_kapp_homomeric(enzyme_protein_info_dfs)
     
-    # ==== 9. Filter values above physical threshold ====
-    print("\n==== STEP 9. Filter values above physical threshold ====")
+    # ==== STEP 9: Filter values above physical threshold ====
+    logger.info("=" * 50)
+    logger.info("STEP 9: Filter values above physical threshold")
     kapp_dfs_filtered = evaluate_kapp_homomeric(kapp_dfs)
     
-    # ==== 10. Get kmax for homomeric enzymes ====
-    print("\n==== STEP 10. Get kmax for homomeric enzymes ====")
+    # ==== STEP 10: Get kmax for homomeric enzymes ====
+    logger.info("=" * 50)
+    logger.info("STEP 10: Get kmax for homomeric enzymes")
     kmax_dfs = get_kmax_homomeric(kapp_dfs_filtered)
     
-    # ==== 11. Get eta values ====
-    print("\n==== STEP 11. Calculate eta values ====")
+    # ==== STEP 11: Calculate eta values ====
+    logger.info("=" * 50)
+    logger.info("STEP 11: Calculate eta values")
     kapp_dfs_eta, kmax_dfs_eta_var = get_eta(kapp_dfs_filtered, kmax_dfs)
     
-    # ==== 12. Save the results ====
-    print("\n==== STEP 12. Save results ====")
-    filename = f"kmax_{run_name}.csv"
-    output_file = output_dir / filename
+    # ==== STEP 12: Save results ====
+    logger.info("=" * 50)
+    logger.info("STEP 12: Save results")
+    output_file = output_dir / f"kmax_{run_name}.csv"
     kmax_dfs_eta_var.to_csv(output_file, index=False)
-    print(f"Results saved to: {output_file}")
+    logger.success(f"Results saved to: {output_file}")
     
-    print(f"\n{'='*60}")
-    print("Pipeline completed!")
-    print(f"{'='*60}")
+    logger.info("=" * 60)
+    logger.success("Pipeline completed!")
+    logger.info("=" * 60)
     
     return kapp_dfs_eta, kmax_dfs_eta_var
 
 
 def main():
-    """
-    Main function to run the pipeline from command line with config file.
-    """
-    import argparse
-    from datetime import datetime
-    import random
-    
-    # Set up argument parser
+    """Main entry point for the kapp pipeline CLI."""
     parser = argparse.ArgumentParser(
-        description='Run kapp pipeline for a metabolic model',
+        prog="run-kapp-pipeline",
+        description="Run kapp pipeline for building enzyme kinetic datasets from metabolic models",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
-        Example usage:
-        python run_kapp_pipeline.py config.yaml
-        
-        Note: Output will be saved to results/run_kapp_pipeline/{organism}_{date}_{random_number}/
-        with subdirectories /data and /results
-        """
+Examples:
+  run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+  python -m scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+
+Output:
+  Results are saved to results/run_kapp_pipeline/{organism}_{date}_{id}/
+  with subdirectories /data (intermediate files) and /results (final outputs)
+        """,
     )
     
     parser.add_argument(
-        'config',
-        type=str,
-        help='Path to YAML configuration file'
+        "config",
+        type=Path,
+        help="Path to YAML configuration file",
     )
-    
-    # Note: output directory is now auto-generated with timestamp and removed from arguments
+    parser.add_argument(
+        "-v", "--verbose",
+        action="store_true",
+        help="Enable verbose (DEBUG) console output",
+    )
     
     args = parser.parse_args()
     
-    # Load configuration file
-    print(f"Loading configuration from: {args.config}")
+    # Load and validate configuration
     try:
-        with open(args.config, 'r', encoding='utf-8') as f:
-            config = yaml.safe_load(f)
-    except FileNotFoundError:
-        print(f"Error: Configuration file not found: {args.config}")
+        logger.info(f"Loading configuration from: {args.config}")
+        config = load_config(args.config)
+    except FileNotFoundError as e:
+        logger.error(f"Configuration file not found: {e}")
         sys.exit(1)
-    except yaml.YAMLError as e:
-        print(f"Error parsing YAML configuration: {e}")
+    except Exception as e:
+        logger.error(f"Error loading configuration: {e}")
         sys.exit(1)
-        
-    script_dir = Path(__file__).parent
     
-    # Extract parameters from config
-    try:
-        organism = config['organism']
-        model_path = script_dir / config['model_path']
-        flux_method = config['flux_method']
-        carbon_uptake = config['carbon_uptake']
-        oxygen_uptake = config['oxygen_uptake']
-        p_total = config['p_total']
-        paxdb_path = script_dir / config['paxdb_path']
-        solver = config.get('solver', 'cplex')  # Default to 'cplex' if not specified
-        
-        # Note: run_name is now auto-generated with timestamp in the output directory setup
-            
-        # Optional parameters
-        raw_substrate_df = config.get('substrate_df')
-        raw_sequence_df = config.get('sequence_df')
-        substrate_df = script_dir / raw_substrate_df if raw_substrate_df else None
-        sequence_df = script_dir / raw_sequence_df if raw_sequence_df else None
-    except KeyError as e:
-        print(f"Error: Missing required parameter in config file: {e}")
-        sys.exit(1)
-        
-    # Resolve output directory structure
-    # Create timestamped run name: {organism}_{date}_{random_number}
+    # Generate run name and setup directories
     current_date = datetime.now().strftime("%Y%m%d")
-    random_num = random.randint(1000, 9999)
-    timestamped_run_name = f"{organism}_{current_date}_{random_num}"
+    random_id = random.randint(1000, 9999)
+    run_name = f"{config.organism}_{current_date}_{random_id}"
     
-    # Set base to project root's results/run_kapp_pipeline/
-    project_root = script_dir.parent  # Go up from scripts/ to project root
-    results_base = project_root / "results" / "run_kapp_pipeline"
+    # Create output directories
+    results_base = PROJ_ROOT / "results" / "run_kapp_pipeline"
+    run_root = results_base / run_name
+    output_dir = ensure_dir_exists(run_root / "results")
+    data_dir = ensure_dir_exists(run_root / "data")
     
-    # Run-specific directory under results/run_kapp_pipeline/
-    run_root = results_base / timestamped_run_name
-    # Create the subdirectories
-    output_dir = run_root / "results"  # Where logs and final outputs go
-    data_dir = run_root / "data"       # For intermediate data (FVA) goes
-
-    # Create directories if they don't exist
-    output_dir.mkdir(parents=True, exist_ok=True)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Output directory set to: {output_dir.relative_to(project_root).as_posix()}")
-    print(f"Data directory set to: {data_dir.relative_to(project_root).as_posix()}")
-
-    # Helper lambda to safely format the path for logging
-    path_to_log = lambda p: p.relative_to(script_dir).as_posix() if p else 'Auto-generated'
+    # Setup logging with file output
+    log_file = output_dir / f"log_{run_name}.log"
+    setup_logging(log_file, run_name)
     
-    # Display and save configuration
-    config_lines = [
-        f"\n{'='*60}",
-        "KAPP PIPELINE CONFIGURATION",
-        f"{'='*60}",
-        f" Run name: {timestamped_run_name}",
-        f" Organism: {organism}",
-        f" Model: {model_path.relative_to(script_dir).as_posix()}",
-        f" Flux method: {flux_method}",
-        f" Solver: {solver}",
-        f" Carbon uptake rates: {carbon_uptake}",
-        f" Oxygen uptake rates: {oxygen_uptake}",
-        f" P_total values: {p_total}",
-        f" Substrate data: {path_to_log(substrate_df)}",
-        f" Sequence data: {path_to_log(sequence_df)}",
-        f" PaxDB data: {paxdb_path.relative_to(script_dir).as_posix()}",
-        f" Data directory: {data_dir.relative_to(project_root).as_posix()}",
-        f" Results directory: {output_dir.relative_to(project_root).as_posix()}",
-        f"{'='*60}\n"
-    ]
-    config_text = "\n".join(config_lines)
-    print(config_text)
+    # Adjust console log level if verbose
+    if args.verbose:
+        logger.remove()
+        logger.add(
+            sys.stderr,
+            format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{function}</cyan>:<cyan>{line}</cyan> | <level>{message}</level>",
+            level="DEBUG",
+            colorize=True,
+        )
+        logger.add(
+            log_file,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {function}:{line} | {message}",
+            level="DEBUG",
+        )
     
-    config_filepath = output_dir / f"log_{timestamped_run_name}.txt"
-    with open(config_filepath, 'w', encoding='utf-8') as f:
-        f.write(config_text)
+    # Log configuration summary
+    logger.info("=" * 60)
+    logger.info("KAPP PIPELINE CONFIGURATION")
+    logger.info("=" * 60)
+    logger.info(f"Run name: {run_name}")
+    logger.info(f"Organism: {config.organism}")
+    logger.info(f"Model: {config.model_path.name}")
+    logger.info(f"Flux method: {config.flux_method}")
+    logger.info(f"Solver: {config.solver}")
+    logger.info(f"Carbon uptake rates: {config.carbon_uptake}")
+    logger.info(f"Oxygen uptake rates: {config.oxygen_uptake}")
+    logger.info(f"Carbon exchange rxn: {config.carbon_exchange_rxn}")
+    logger.info(f"Oxygen exchange rxn: {config.oxygen_exchange_rxn}")
+    logger.info(f"P_total values: {config.p_total}")
+    logger.info(f"Substrate data: {config.substrate_df.name if config.substrate_df else 'Auto-generated'}")
+    logger.info(f"Sequence data: {config.sequence_df.name if config.sequence_df else 'Auto-generated'}")
+    logger.info(f"PaxDB data: {config.paxdb_path.name}")
+    logger.info(f"Output directory: {output_dir.relative_to(PROJ_ROOT)}")
+    logger.info(f"Data directory: {data_dir.relative_to(PROJ_ROOT)}")
+    logger.info("=" * 60)
     
-    # Redirect prints to the log file and console
-    original_stdout = sys.stdout
-    with open(config_filepath, 'a', encoding='utf-8') as log_file:
-        sys.stdout = Tee(sys.stdout, log_file)
+    # Run the pipeline
+    try:
+        kapp_results, kmax_results = run_kapp_pipeline(
+            config=config,
+            output_dir=output_dir,
+            data_dir=data_dir,
+            run_name=run_name,
+        )
+        logger.success("Pipeline execution completed successfully!")
+        return 0
         
-        try:
-            print(f"\nConfiguration saved to {config_filepath.relative_to(project_root).as_posix()}")
-
-            # Run the pipeline
-            kapp_results, kmax_results = run_kapp_pipeline(
-                organism=organism,
-                model_path=model_path,
-                flux_method=flux_method,
-                carbon_uptake=carbon_uptake,
-                oxygen_uptake=oxygen_uptake,
-                p_total=p_total,
-                substrate_df=substrate_df,
-                sequence_df=sequence_df,
-                paxdb_path=paxdb_path,
-                solver=solver,
-                output_dir=output_dir,
-                data_dir=data_dir,
-                run_name=timestamped_run_name
-            )
-            
-            print("\nPipeline execution completed successfully!")
-                    
-        except Exception as e:
-            print(f"\nError running pipeline: {e}")
-            import traceback
-            traceback.print_exc()
-            sys.exit(1)
-        finally:
-            # Restore stdout
-            sys.stdout = original_stdout
+    except Exception as e:
+        logger.exception(f"Pipeline failed with error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

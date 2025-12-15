@@ -1,7 +1,8 @@
 # --- Project Metadata ---
 [project]
-name = "bactocat_env"
+name = "bactocat"
 version = "0.1.0"
+description = "BactoCat: A pipeline for building kapp datasets from genome-scale metabolic models"
 requires-python = "~=3.10.0"
 
 # --- Dependencies ---
@@ -26,9 +27,25 @@ dependencies = [
     "mygene",
     "tqdm",
     "pubchempy",
-    "dotenv",
-    "loguru"
+    "python-dotenv",
+    "loguru",
+    "pydantic>=2.0",
+    "pyyaml",
 ]
+
+# --- CLI Entry Points ---
+[project.scripts]
+run-kapp-pipeline = "scripts.run_kapp_pipeline:main"
+
+# --- Build System ---
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# --- Package Discovery ---
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "scripts*"]
 
 # --- uv ---
 [tool.uv]
