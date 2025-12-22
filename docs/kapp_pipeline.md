@@ -1,42 +1,10 @@
 # k<sub>app</sub> Pipeline
 
-This directory contains an automated pipeline for calculating apparent *in vivo* turnover numbers (k<sub>app</sub>) from genome-scale metabolic models.
 
-## Installation
+## Structure
 
-First, install BactoCat as an editable package from the project root:
+The pipeline is executed via the `run-kapp-pipeline` command-line tool, which requires a YAML configuration file specifying model parameters, flux simulation conditions, proteomics data, and filtering thresholds. The tool processes genome-scale metabolic models through multiple steps—from GPR analysis and flux simulations to k<sub>app</sub> calculation and filtering—producing curated datasets of apparent turnover numbers.
 
-```bash
-cd BactoCat
-pip install -e .
-```
-
-This installs:
-- All required dependencies
-- The `run-kapp-pipeline` CLI command
-- BactoCat modules for import
-
-## Quick Start
-
-### Basic Usage
-
-After installation, run the pipeline using the CLI command:
-
-```bash
-# From anywhere (after installation)
-run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
-
-# Or using Python module syntax
-python -m scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
-```
-
-### Verbose Mode
-
-For detailed debug output including function calls and line numbers:
-
-```bash
-run-kapp-pipeline -v configs/run_kapp_pipeline/ecoli_homomeric.yaml
-```
 
 ## Configuration File
 

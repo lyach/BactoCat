@@ -1,11 +1,61 @@
-# BactoCat Dataset
+# BactoCat 
 
-A comprehensive dataset and analysis pipeline for *in vivo*-like kcat (catalytic turnover number) values, integrating multiple databases and metabolic models for enzyme kinetics research.
+A computational framework designed to bridge the gap between *in vitro* enzyme kinetics and the actual physiological performance of enzymes within living cells. 
 
-## Overview
+By integrating large-scale phenomics, proteomics, and genome-scale metabolic models (GEMs), BactoCat derives apparent catalytic rates ($k_{app}$) that reflect the true metabolic flux potential of bacterial enzymes.
 
-This repository contains curated datasets, processing scripts, and analysis notebooks for studying enzyme kinetics across different organisms.
+## Table of Contents
+* [Getting Started](#getting-started)
+* [Basic usage](#basic-usage)
+* [Environment](#environment-set-up)
+* [Solver](#solver-set-up)
+* [Repository Structure](#repository-structure)
 
+---
+
+## Getting Started
+
+Clone the repository  :
+```bash
+git clone https://github.com/lyach/BactoCat.git
+```
+
+Once cloned, you can install BactoCat as an editable package:
+
+```bash
+cd BactoCat
+pip install -e .
+```
+
+This installs:
+- All required dependencies
+- The `run-kapp-pipeline` CLI command
+- BactoCat modules for import
+
+
+## Basic Usage
+
+After installation, you can run the pipeline using the CLI command:
+
+```bash
+run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+```
+
+Or run using Python or uv module syntax:
+```bash
+# python
+python -m scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+
+# uv 
+uv run scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+```
+
+You can also run a detailed verbose output with:
+```bash
+run-kapp-pipeline -v configs/run_kapp_pipeline/ecoli_homomeric.yaml
+```
+
+A detailed documentation of the pipeline parameters can be found [here](docs/kapp_pipeline.md).
 
 ## Environment set-up
 
@@ -63,7 +113,7 @@ uv sync
 ```
    This automatically resolves and locks dependencies for reproducibility (`uv.lock` file).
 
-**Updating the environment**
+**6. Updating the environment**
 
 Whenever you modify dependencies (add or update a package), run:
 ```
