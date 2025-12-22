@@ -56,5 +56,5 @@ results/*
 cache/
 
 # uv
-uv.lock
+uv.lockgit restore --staged data/external_databases/
 .venv/
