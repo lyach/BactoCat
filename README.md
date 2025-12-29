@@ -1,8 +1,8 @@
 # BactoCat 
 
-A computational framework designed to bridge the gap between *in vitro* enzyme kinetics and the actual physiological performance of enzymes within living cells. 
+A computational framework designed to bridge the gap between *in vitro* and *in vivo* enzyme kinetics. 
 
-By integrating large-scale phenomics, proteomics, and genome-scale metabolic models (GEMs), BactoCat derives apparent catalytic rates ($k_{app}$) that reflect the true metabolic flux potential of bacterial enzymes.
+By integrating large-scale phenomics, proteomics, and genome-scale metabolic models (GEMs), BactoCat derives apparent catalytic rates ($k_{app}$) that reflect the true catalytic potential of enzymes within bacterial cells.
 
 ## Table of Contents
 * [Getting Started](#getting-started)
@@ -41,13 +41,13 @@ After installation, you can run the pipeline using the CLI command:
 run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
 ```
 
-Or run using Python or uv module syntax:
+Or run the module using Python or uv:
 ```bash
 # python
 python -m scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
 
 # uv 
-uv run scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
+uv run -m scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
 ```
 
 You can also run a detailed verbose output with:
@@ -120,23 +120,26 @@ Whenever you modify dependencies (add or update a package), run:
 uv sync --upgrade
 ```
 
-or to install a single new package:
+To install a single new package:
 ```
 uv add <package-name>
 ```
 
+To remove a single new package:
+```
+uv remove <package-name>
+``` 
+
 
 ## Solver set-up
 
-The BactoCat pipeline relies on the IBM CPLEX Optimization Studio solver.
-To use CPLEX within this environment, install the Python API from your local CPLEX Studio installation (requires a valid academic or commercial license):
-```
-pip install "C:\Program Files\IBM\ILOG\CPLEX_Studio2211\cplex\python\3.10\x64_win64"
-```
+The BactoCat framework relies on external solvers to perform optimization tasks like parsimonious Flux Balance Analysis (pFBA). To run the **complete pipeline**, you must have at least one of the following solvers installed on your system:
+- [IBM CPLEX](https://www.ibm.com/products/ilog-cplex-optimization-studio) (requires license) 
+- [Gurobi](https://www.gurobi.com/lp/all/request-an-evaluation/?utm_source=google&utm_medium=cpc&utm_campaign=M3+DG+Search+NA+Brand&gad_source=1&gad_campaignid=193283256&gbraid=0AAAAADimQ3hP-_zFR-f3IsRZ0E_dQ7VmZ&gclid=CjwKCAiAmKnKBhBrEiwAaqAnZy5G51otRX82XLRp-6SEAtRUtVB540b6DdUNlO04R-mmwWGvxJxVHxoCBKgQAvD_BwE) (requires license)
 
-  - **NOTE**: CPLEX is not included on `environment.yml`. Each user must install it manually from their own licensed CPLEX Studio installation. Ensure your license environment variables (e.g., ILOG_LICENSE_FILE) are correctly configured.
+**Note**: The `cplex` and `gurobipy` packages are not included in the dependencies. You must manually install your licensed executable.
 
-
+**Alternative**: If you do not have a commercial solver license, you can run **Light-BactoCat**. This configuration uses the `glpk` solver for optimization. Note that Flux Variability Analysis (FVA) is disabled in this mode.
 
 ## Repository Structure
 
