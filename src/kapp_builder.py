@@ -104,9 +104,7 @@ def create_fluxomics_dataframe(
         logger.info("Using given medium mode for flux simulations")
         conditions = process_medium_df(medium_df)
         
-        for condition_id, medium_dict in tqdm(conditions, desc="Flux conditions", unit="cond"):
-            logger.debug(f"Processing condition: {condition_id}")
-            
+        for condition_id, medium_dict in tqdm(conditions, desc="Flux conditions", unit="cond"):            
             # Create a copy of the model to avoid modifying the original
             model_copy = GEM.copy()
             
@@ -125,7 +123,6 @@ def create_fluxomics_dataframe(
             col_name = f'flux_{condition_id}'
             if solution.status == 'optimal':
                 flux_results[col_name] = [solution.fluxes[rxn_id] for rxn_id in rxn_ids]
-                logger.debug(f"Condition {condition_id} completed successfully")
             else:
                 logger.warning(f"Condition {condition_id} optimization failed with status: {solution.status}")
                 flux_results[col_name] = [0.0] * len(rxn_ids)
@@ -222,11 +219,11 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=Fals
                 rxn.upper_bound = flux_value
             if verbose:
                 if medium_upper_bound:
-                    print(f"  Fixed {rxn_id}: lower={flux_value}, upper={flux_value}")
+                    logger.debug(f"  Fixed {rxn_id}: lower={flux_value}, upper={flux_value}")
                 else:
-                    print(f"  Set {rxn_id}: lower={flux_value}, upper={rxn.upper_bound}")
+                    logger.debug(f"  Set {rxn_id}: lower={flux_value}, upper={rxn.upper_bound}")
         except KeyError:
-            print(f"  Warning: Reaction provided '{rxn_id}' was not found in model")
+            logger.warning(f"  Warning: Reaction provided '{rxn_id}' was not found in model")
 
 
 def create_FVA_dataframe(
@@ -328,7 +325,6 @@ def create_FVA_dataframe(
             FVA_lower_results[f'FVA_lower_{condition_id}'] = fva_df['FVA_lower'].values
             FVA_upper_results[f'FVA_upper_{condition_id}'] = fva_df['FVA_upper'].values
             
-            logger.debug(f"Condition {condition_id} completed successfully.")
         
         num_conditions = len(conditions)
         
@@ -337,9 +333,7 @@ def create_FVA_dataframe(
         logger.info("Using given carbon/oxygen combinations for FVA simulations")
         uptake_combinations = list(product(carbon_uptake, oxygen_uptake))
         
-        for i, (carbon_rate, oxygen_rate) in tqdm(enumerate(uptake_combinations, 1), total=len(uptake_combinations), desc="FVA conditions", unit="cond"):
-            logger.debug(f"Running FVA condition {i}: Carbon={carbon_rate}, Oxygen={oxygen_rate}")
-            
+        for i, (carbon_rate, oxygen_rate) in tqdm(enumerate(uptake_combinations, 1), total=len(uptake_combinations), desc="FVA conditions", unit="cond"):            
             # Copy model
             model_copy = base_model.copy()
             
@@ -378,9 +372,7 @@ def create_FVA_dataframe(
             # Store FVA lower/upper bounds
             FVA_lower_results[f'FVA_lower_cond{i}'] = fva_df['FVA_lower'].values
             FVA_upper_results[f'FVA_upper_cond{i}'] = fva_df['FVA_upper'].values
-            
-            logger.debug(f"Condition {i} completed successfully.")
-        
+                    
         num_conditions = len(uptake_combinations)
         
     else:
@@ -453,29 +445,15 @@ def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bo
     
     violations_df = pd.DataFrame(violations)
     
-    # DEBUG - to be removed
+    # Violation report
     if not violations_df.empty:
         unique_rxns = violations_df['rxn_id'].nunique()
         total_violations = len(violations_df)
-        
-        print(f"\n{'='*10} FVA VIOLATION REPORT {'='*10}")
-        print(f"Total violation instances (Cell count): {total_violations}")
-        print(f"Unique reactions affected (Row count): {unique_rxns}")
-        
-        print("\nViolations by Condition:")
-        print(violations_df.groupby('condition').size().to_string())
-                
-        # Show detailed values for top 10 most problematic reactions
-        top_problematic = violations_df['rxn_id'].value_counts().head(10).index.tolist()
-        top_violations = violations_df[violations_df['rxn_id'].isin(top_problematic)]
-        
-        print("\nValues for Violating Reactions:")
-        display_cols = ['rxn_id', 'condition', 'violation_type', 'flux', 'FVA_lower', 'FVA_upper']
-        print(top_violations[display_cols].to_string(index=False))
-        
-        print(f"{'='*42}\n")
+        logger.debug(f"Total violation instances (Cell count): {total_violations}")
+        logger.debug(f"Unique reactions affected (Row count): {unique_rxns}")
+        logger.debug(f"Violations by Condition: {(violations_df.groupby('condition').size().to_string())}")
     else:
-        print("No FVA violations detected.")
+        logger.debug("No FVA violations detected.")
     
     
     if filter and not violations_df.empty:
@@ -483,7 +461,7 @@ def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bo
         before = len(merged_df)
         merged_df = merged_df[~merged_df['rxn_id'].isin(violating_rxns)].copy()
         after = len(merged_df)
-        print(f"Filtered out {before - after} reactions with violations.")
+        logger.debug(f"Filtered out {before - after} reactions with violations.")
     filtered_fluxomics_df = merged_df.copy()
     return filtered_fluxomics_df, violations_df
 
@@ -535,26 +513,26 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
     enzyme_info_dfs = {}
     
     # Get all flux condition columns
-    flux_columns = [col for col in fluxomics_df.columns if col.startswith('flux_cond')]
-    
-    print(f"Processing {len(flux_columns)} flux conditions...")
-    
+    flux_columns = [col for col in fluxomics_df.columns if col.startswith('flux_')]
+        
     # Process each flux condition
     for flux_col in flux_columns:
-        print(f"Processing {flux_col}...")
-        print(f"Rows before filtering: {len(enzymes_df)}")
+        logger.debug(f"Processing {flux_col}...")
+        logger.debug(f" Rows before filtering: {len(enzymes_df)}")
         
         # Create a copy of enzymes_df for this condition
         condition_df = enzymes_df.copy()
-        cond_num = flux_col.replace("flux_cond", "")
-        lower_col = f"FVA_lower_cond{cond_num}"
-        upper_col = f"FVA_upper_cond{cond_num}"
+        
+        # Extract condition suffix
+        cond_suffix = flux_col.replace("flux_", "")
+        lower_col = f"FVA_lower_{cond_suffix}"
+        upper_col = f"FVA_upper_{cond_suffix}"
 
 
         # == Fluxomics info ==
         # Merge with specific flux condition
         if lower_col not in fluxomics_df.columns or upper_col not in fluxomics_df.columns:
-            print(f"Warning: Missing FVA columns for {flux_col} — skipping FVA merge.")
+            logger.warning(f"Warning: Missing FVA columns for {flux_col} — skipping FVA merge.")
             flux_subset = fluxomics_df[['rxn_id', flux_col]].copy()
             flux_subset.rename(columns={flux_col: 'flux_value'}, inplace=True)
         else:
@@ -627,9 +605,9 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         # Store the processed dataframe
         enzyme_info_dfs[flux_col] = condition_df
         
-        print(f"Completed {flux_col}: {len(condition_df)} rows after filtering")
+        print(f" {len(condition_df)} rows after filtering")
     
-    print(f"Created enzyme info dataframes for {len(enzyme_info_dfs)} conditions")
+    logger.info(f"Created enzyme info dataframes for {len(enzyme_info_dfs)} conditions")
     return enzyme_info_dfs
 
 
@@ -728,22 +706,21 @@ def map_paxdb_to_gene(paxdb_df: pd.DataFrame, df_enzymes: pd.DataFrame, p_total:
     return enz_mapped
 
 
-def process_enzyme_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_total: list):
+def process_enzyme_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_total: float):
     """
-    Apply PaxDB protein mapping across all enzyme info dataframes and p_total values.
+    Apply PaxDB protein mapping across all enzyme info dataframes.
     
     Parameters:
         enzyme_info_dfs: dict
             Dictionary with condition names as keys and enzyme dataframes as values
         paxdb_path: str
             Path to PaxDB TSV file
-        p_total: list
-            List of total protein content values (g/gDCW) to test
+        p_total: float
+            Total protein content value (g protein / g DCW)
     
     Returns:
         enzyme_protein_info_dfs: dict
-            Nested dictionary structure:
-            {condition_name: {p_total_value: mapped_dataframe}}
+            Dictionary structure: {condition_name: mapped_dataframe}
     """
     
     # Load PaxDB data
@@ -754,43 +731,28 @@ def process_enzyme_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_tot
     # Initialize output dictionary
     enzyme_protein_info_dfs = {}
     
-    # Get condition names and p_total values for progress tracking
-    total_combinations = len(enzyme_info_dfs) * len(p_total)
-    current_combination = 0
+    logger.info(f"Processing {len(enzyme_info_dfs)} conditions with p_total={p_total}")
     
-    print(f"Processing {len(enzyme_info_dfs)} conditions × {len(p_total)} p_total values = {total_combinations} combinations")
-    
-    # Double nested loop: for each condition, for each p_total value
     for condition_name, enzyme_df in enzyme_info_dfs.items():
         print(f"\nProcessing condition: {condition_name}")
         
-        # Initialize nested dictionary for this condition
-        enzyme_protein_info_dfs[condition_name] = {}
-        
-        for p_value in p_total:
-            current_combination += 1
-            print(f"  Processing p_total={p_value} ({current_combination}/{total_combinations})")
+        # Apply map_paxdb_to_gene function
+        try:
+            mapped_df = map_paxdb_to_gene(
+                paxdb_df=paxdb_df,
+                df_enzymes=enzyme_df,
+                p_total=p_total
+            )
             
-            # Apply map_paxdb_to_gene function
-            try:
-                mapped_df = map_paxdb_to_gene(
-                    paxdb_df=paxdb_df,
-                    df_enzymes=enzyme_df,
-                    p_total=p_value
-                )
-                
-                # Store the result
-                enzyme_protein_info_dfs[condition_name][p_value] = mapped_df
-                
-                print(f"    Success: {len(mapped_df)} rows, {mapped_df['protein_ppm'].notna().sum()} with protein data")
-                
-            except Exception as e:
-                print(f"    Error processing {condition_name} with p_total={p_value}: {str(e)}")
-                # Store None or empty dataframe for failed combinations
-                enzyme_protein_info_dfs[condition_name][p_value] = None
-    
-    print("\nCompleted processing all combinations")
-    print(f"Results structure: {len(enzyme_protein_info_dfs)} conditions × {len(p_total)} p_total values")
+            # Store the result
+            enzyme_protein_info_dfs[condition_name] = mapped_df
+            
+            print(f"  Success: {len(mapped_df)} rows, {mapped_df['protein_ppm'].notna().sum()} with protein data")
+            
+        except Exception as e:
+            print(f"  Error processing {condition_name}: {str(e)}")
+            # Store None for failed conditions
+            enzyme_protein_info_dfs[condition_name] = None
     
     return enzyme_protein_info_dfs
 
@@ -798,11 +760,11 @@ def process_enzyme_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_tot
 
 def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
     """
-    Calculate kapp for homomeric enzymes for each condition and p_total combination.
+    Calculate kapp for homomeric enzymes for each condition.
     
     Parameters:
         enzyme_protein_info_dfs: dict
-            Nested dictionary with structure {condition: {p_total: dataframe}}
+            Dictionary with structure {condition: dataframe}
     
     Returns:
         dict: Same structure as input but with added 'kcat_app' column in each dataframe
@@ -811,58 +773,50 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
     # Initialize output dictionary
     kapp_results = {}
     
-    # Double nested loop: for each condition, for each p_total value
-    for condition_name, p_total_dict in enzyme_protein_info_dfs.items():
+    for condition_name, enzyme_df in enzyme_protein_info_dfs.items():
         print(f"\nProcessing condition: {condition_name}")
         
-        # Initialize nested dictionary for this condition
-        kapp_results[condition_name] = {}
+        # Skip if dataframe is None (failed processing)
+        if enzyme_df is None:
+            print("  Skipping - no data available")
+            kapp_results[condition_name] = None
+            continue
         
-        for p_total_value, enzyme_df in p_total_dict.items():
-            print(f"  Processing p_total={p_total_value}")
-            
-            # Skip if dataframe is None (failed processing)
-            if enzyme_df is None:
-                print("    Skipping - no data available")
-                kapp_results[condition_name][p_total_value] = None
-                continue
-            
-            # Work with a copy to avoid modifying original
-            df_copy = enzyme_df.copy()
-            
-            print(f'    Rows before filtering homomeric: {len(df_copy)}')
-            
-            # Keep only homomeric enzymes
-            df_copy = df_copy[df_copy['gpr_class'] == 'simple']
-            print(f'    Rows after filtering homomeric: {len(df_copy)}')
-            
-            # Drop duplicate enzymes
-            print(f'    Rows before filtering duplicates: {len(df_copy)}')
-            df_copy = df_copy.drop_duplicates(subset=["gene", "SMILES"])
-            print(f'    Rows after filtering duplicates: {len(df_copy)}')
+        # Work with a copy to avoid modifying original
+        df_copy = enzyme_df.copy()
+        
+        print(f'  Rows before filtering homomeric: {len(df_copy)}')
+        
+        # Keep only homomeric enzymes
+        df_copy = df_copy[df_copy['gpr_class'] == 'simple']
+        print(f'  Rows after filtering homomeric: {len(df_copy)}')
+        
+        # Drop duplicate enzymes
+        print(f'  Rows before filtering duplicates: {len(df_copy)}')
+        df_copy = df_copy.drop_duplicates(subset=["gene", "SMILES"])
+        print(f'  Rows after filtering duplicates: {len(df_copy)}')
 
-            # Convert negative fluxes to positive (take absolute value)
-            df_copy['flux_value'] = df_copy['flux_value'].abs()
-            
-            # COBRA fluxes are in mmol/gDW*h, convert to mmol/gDW*s
-            df_copy['flux_value_per_sec'] = df_copy['flux_value'] / 3600  # mmol/gDW*s
-            
-            # Calculate kcat_app: flux (mmol/gDW*s) / enzyme concentration (mmol/gDCW) = kcat (1/s)
-            # Handle division by zero by replacing with NaN
-            df_copy['kcat_app'] = df_copy['flux_value_per_sec'] / df_copy['protein_mmol_gdcw']
-            
-            # Replace infinite values with NaN
-            df_copy['kcat_app'] = df_copy['kcat_app'].replace([float('inf'), float('-inf')], float('nan'))
-            
-            # Count valid kcat_app values
-            valid_kcat = df_copy['kcat_app'].notna().sum()
-            print(f"    Calculated kcat_app for {valid_kcat} enzymes")
-                
-           
-            # Store the processed dataframe
-            kapp_results[condition_name][p_total_value] = df_copy
+        # Convert negative fluxes to positive (take absolute value)
+        df_copy['flux_value'] = df_copy['flux_value'].abs()
+        
+        # COBRA fluxes are in mmol/gDW*h, convert to mmol/gDW*s
+        df_copy['flux_value_per_sec'] = df_copy['flux_value'] / 3600  # mmol/gDW*s
+        
+        # Calculate kcat_app: flux (mmol/gDW*s) / enzyme concentration (mmol/gDCW) = kcat (1/s)
+        # Handle division by zero by replacing with NaN
+        df_copy['kcat_app'] = df_copy['flux_value_per_sec'] / df_copy['protein_mmol_gdcw']
+        
+        # Replace infinite values with NaN
+        df_copy['kcat_app'] = df_copy['kcat_app'].replace([float('inf'), float('-inf')], float('nan'))
+        
+        # Count valid kcat_app values
+        valid_kcat = df_copy['kcat_app'].notna().sum()
+        print(f"  Calculated kcat_app for {valid_kcat} enzymes")
+        
+        # Store the processed dataframe
+        kapp_results[condition_name] = df_copy
     
-    print("\nCompleted kcat_app calculation for all conditions and p_total values")
+    print("\nCompleted kcat_app calculation for all conditions")
     return kapp_results
 
 def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lower_threshold: float = 1e-5):
@@ -871,7 +825,7 @@ def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lo
     
     Parameters:
         kapp_results: dict
-            Nested dictionary with structure {condition: {p_total: dataframe}}
+            Dictionary with structure {condition: dataframe}
         upper_threshold: float
             Upper threshold for filtering kcat_app values (default: 1e6 s⁻¹)
             Rows with kcat_app > upper_threshold will be removed
@@ -895,63 +849,56 @@ def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lo
     total_removed_high = 0
     total_removed_low = 0
     
-    # Double nested loop: for each condition, for each p_total value
-    for condition_name, p_total_dict in kapp_results.items():
+    for condition_name, df in kapp_results.items():
         print(f"\nProcessing condition: {condition_name}")
         
-        # Initialize nested dictionary for this condition
-        kapp_filtered_results[condition_name] = {}
+        # Skip if dataframe is None
+        if df is None:
+            print("  Skipping - no data available")
+            kapp_filtered_results[condition_name] = None
+            continue
         
-        for p_total_value, df in p_total_dict.items():
-            print(f"  Processing p_total={p_total_value}")
-            
-            # Skip if dataframe is None
-            if df is None:
-                print("    Skipping - no data available")
-                kapp_filtered_results[condition_name][p_total_value] = None
-                continue
-            
-            # Work with a copy to avoid modifying original
-            df_filtered = df.copy()
-            
-            original_count = len(df_filtered)
-            print(f"    Original rows: {original_count}")
-            
-            # Count values that will be removed for each threshold
-            high_values = df_filtered['kcat_app'] > upper_threshold
-            low_values = df_filtered['kcat_app'] < lower_threshold
-            removed_high_count = high_values.sum()
-            removed_low_count = low_values.sum()
-            
-            # Filter out rows where kcat_app is outside the acceptable range
-            # Keep rows where kcat_app is NaN, or within [lower_threshold, upper_threshold]
-            mask = (df_filtered['kcat_app'].isna()) | ((df_filtered['kcat_app'] >= lower_threshold) & (df_filtered['kcat_app'] <= upper_threshold))
-            df_filtered = df_filtered[mask]
-            
-            filtered_count = len(df_filtered)
-            total_removed_count = original_count - filtered_count
-            
-            print(f"    Filtered rows: {filtered_count}")
-            print(f"    Removed total: {total_removed_count} (high: {removed_high_count}, low: {removed_low_count})")
-            
-            if removed_high_count > 0:
-                high_removed_values = df[high_values]['kcat_app'].dropna()
-                if len(high_removed_values) > 0:
-                    print(f"    Removed high values range: {high_removed_values.min():.2e} to {high_removed_values.max():.2e} s⁻¹")
-            
-            if removed_low_count > 0:
-                low_removed_values = df[low_values]['kcat_app'].dropna()
-                if len(low_removed_values) > 0:
-                    print(f"    Removed low values range: {low_removed_values.min():.2e} to {low_removed_values.max():.2e} s⁻¹")
-            
-            # Update statistics
-            total_original_rows += original_count
-            total_filtered_rows += filtered_count
-            total_removed_high += removed_high_count
-            total_removed_low += removed_low_count
-            
-            # Store the filtered dataframe
-            kapp_filtered_results[condition_name][p_total_value] = df_filtered
+        # Work with a copy to avoid modifying original
+        df_filtered = df.copy()
+        
+        original_count = len(df_filtered)
+        print(f"  Original rows: {original_count}")
+        
+        # Count values that will be removed for each threshold
+        high_values = df_filtered['kcat_app'] > upper_threshold
+        low_values = df_filtered['kcat_app'] < lower_threshold
+        removed_high_count = high_values.sum()
+        removed_low_count = low_values.sum()
+        
+        # Filter out rows where kcat_app is outside the acceptable range
+        # Keep rows where kcat_app is NaN, or within [lower_threshold, upper_threshold]
+        mask = (df_filtered['kcat_app'].isna()) | ((df_filtered['kcat_app'] >= lower_threshold) & (df_filtered['kcat_app'] <= upper_threshold))
+        df_filtered = df_filtered[mask]
+        
+        filtered_count = len(df_filtered)
+        total_removed_count = original_count - filtered_count
+        
+        print(f"  Filtered rows: {filtered_count}")
+        print(f"  Removed total: {total_removed_count} (high: {removed_high_count}, low: {removed_low_count})")
+        
+        if removed_high_count > 0:
+            high_removed_values = df[high_values]['kcat_app'].dropna()
+            if len(high_removed_values) > 0:
+                print(f"  Removed high values range: {high_removed_values.min():.2e} to {high_removed_values.max():.2e} s⁻¹")
+        
+        if removed_low_count > 0:
+            low_removed_values = df[low_values]['kcat_app'].dropna()
+            if len(low_removed_values) > 0:
+                print(f"  Removed low values range: {low_removed_values.min():.2e} to {low_removed_values.max():.2e} s⁻¹")
+        
+        # Update statistics
+        total_original_rows += original_count
+        total_filtered_rows += filtered_count
+        total_removed_high += removed_high_count
+        total_removed_low += removed_low_count
+        
+        # Store the filtered dataframe
+        kapp_filtered_results[condition_name] = df_filtered
     
     # Print summary statistics
     total_removed_rows = total_removed_high + total_removed_low
@@ -971,44 +918,41 @@ def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lo
 
 def get_kmax_homomeric(kapp_results: dict):
     """
-    Get the maximum kapp of each enzyme-substrate pair across all conditions and p_total combinations.
+    Get the maximum kapp of each enzyme-substrate pair across all conditions.
     
     Parameters:
         kapp_results: dict
-            Nested dictionary with structure {condition: {p_total: dataframe}}
+            Dictionary with structure {condition: dataframe}
     Returns:
         kmax_results: pd.DataFrame
-            DataFrame with columns: ['sequence', 'SMILES', 'kcat_app_max', 'condition_max', 'p_total_max']
+            DataFrame with columns: ['sequence', 'SMILES', 'kcat_app_max', 'condition_max']
             containing the maximum kcat_app value for each enzyme-substrate pair
     """
     
-    print("Starting kmax analysis across all conditions and p_total values...")
+    print("Starting kmax analysis across all conditions...")
     
     # List to collect all dataframes with metadata
     all_dataframes = []
     
-    # Flatten the nested dictionary structure
-    for condition_name, p_total_dict in kapp_results.items():
-        for p_total_value, df in p_total_dict.items():
-            # Skip None dataframes
-            if df is None or len(df) == 0:
-                continue
-                
-            # Add metadata columns to track source
-            df_with_metadata = df.copy()
-            df_with_metadata['source_condition'] = condition_name
-            df_with_metadata['source_p_total'] = p_total_value
+    for condition_name, df in kapp_results.items():
+        # Skip None dataframes
+        if df is None or len(df) == 0:
+            continue
             
-            # Only keep rows with valid kcat_app values
-            df_with_metadata = df_with_metadata[df_with_metadata['kcat_app'].notna()]
-            
-            if len(df_with_metadata) > 0:
-                all_dataframes.append(df_with_metadata)
-                print(f"  Added {len(df_with_metadata)} valid entries from {condition_name}, p_total={p_total_value}")
+        # Add metadata columns to track source
+        df_with_metadata = df.copy()
+        df_with_metadata['source_condition'] = condition_name
+        
+        # Only keep rows with valid kcat_app values
+        df_with_metadata = df_with_metadata[df_with_metadata['kcat_app'].notna()]
+        
+        if len(df_with_metadata) > 0:
+            all_dataframes.append(df_with_metadata)
+            print(f"  Added {len(df_with_metadata)} valid entries from {condition_name}")
     
     if not all_dataframes:
         print("No valid data found across all conditions")
-        return pd.DataFrame(columns=['sequence', 'SMILES', 'kcat_app_max', 'condition_max', 'p_total_max'])
+        return pd.DataFrame(columns=['sequence', 'SMILES', 'kcat_app_max', 'condition_max'])
     
     # Concatenate all dataframes
     combined_df = pd.concat(all_dataframes, ignore_index=True)
@@ -1025,7 +969,7 @@ def get_kmax_homomeric(kapp_results: dict):
     
     # Select and rename relevant columns for output
     output_columns = [
-        'sequence', 'SMILES', 'kcat_app', 'source_condition', 'source_p_total',
+        'sequence', 'SMILES', 'kcat_app', 'source_condition',
         'gene', 'rxn', 'flux_value', 'FVA_upper', 'FVA_lower', 'protein_mmol_gdcw', 'subsystem' 
         # Additional useful columns
     ]
@@ -1037,8 +981,7 @@ def get_kmax_homomeric(kapp_results: dict):
     # Rename columns for clarity
     column_renames = {
         'kcat_app': 'kcat_app_max',
-        'source_condition': 'condition_max',
-        'source_p_total': 'p_total_max'
+        'source_condition': 'condition_max'
     }
     kmax_results = kmax_results.rename(columns=column_renames)
     
@@ -1059,11 +1002,11 @@ def get_kmax_homomeric(kapp_results: dict):
 
 def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
     """
-    Calculate eta (kapp/kmax) for each enzyme-substrate pair across all conditions and p_total values.
+    Calculate eta (kapp/kmax) for each enzyme-substrate pair across all conditions.
     
     Parameters:
         kapp_results: dict
-            Nested dictionary with structure {condition: {p_total: dataframe}}
+            Dictionary with structure {condition: dataframe}
         kmax_results: pd.DataFrame
             DataFrame with maximum kcat_app values for each enzyme-substrate pair
     
@@ -1081,54 +1024,46 @@ def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
     # List to collect all eta values for variance calculation
     all_eta_values = []
     
-    # Process each condition and p_total combination
-    for condition_name, p_total_dict in kapp_results.items():
+    for condition_name, df in kapp_results.items():
         print(f"\nProcessing condition: {condition_name}")
         
-        # Initialize nested dictionary for this condition
-        kapp_results_with_eta[condition_name] = {}
+        # Skip if dataframe is None
+        if df is None:
+            print("  Skipping - no data available")
+            kapp_results_with_eta[condition_name] = None
+            continue
         
-        for p_total_value, df in p_total_dict.items():
-            print(f"  Processing p_total={p_total_value}")
-            
-            # Skip if dataframe is None
-            if df is None:
-                print("    Skipping - no data available")
-                kapp_results_with_eta[condition_name][p_total_value] = None
-                continue
-            
-            # Work with a copy
-            df_with_eta = df.copy()
-            
-            # Merge with kmax_results to get the maximum kcat_app value
-            df_with_eta = pd.merge(
-                df_with_eta,
-                kmax_results[['sequence', 'SMILES', 'kcat_app_max']],
-                on=['sequence', 'SMILES'],
-                how='left'
-            )
-            
-            # Calculate eta = kcat_app / kcat_app_max
-            df_with_eta['eta'] = df_with_eta['kcat_app'] / df_with_eta['kcat_app_max']
-            
-            # Replace infinite values with NaN
-            df_with_eta['eta'] = df_with_eta['eta'].replace([float('inf'), float('-inf')], float('nan'))
-            
-            # Count valid eta values
-            valid_eta = df_with_eta['eta'].notna().sum()
-            print(f"    Calculated eta for {valid_eta} enzyme-substrate pairs")
-            
-            # Store the dataframe with eta
-            kapp_results_with_eta[condition_name][p_total_value] = df_with_eta
-            
-            # Collect eta values for variance calculation
-            eta_data = df_with_eta[['sequence', 'SMILES', 'eta']].copy()
-            eta_data['source_condition'] = condition_name
-            eta_data['source_p_total'] = p_total_value
-            eta_data = eta_data[eta_data['eta'].notna()]  # Keep only valid eta values
-            
-            if len(eta_data) > 0:
-                all_eta_values.append(eta_data)
+        # Work with a copy
+        df_with_eta = df.copy()
+        
+        # Merge with kmax_results to get the maximum kcat_app value
+        df_with_eta = pd.merge(
+            df_with_eta,
+            kmax_results[['sequence', 'SMILES', 'kcat_app_max']],
+            on=['sequence', 'SMILES'],
+            how='left'
+        )
+        
+        # Calculate eta = kcat_app / kcat_app_max
+        df_with_eta['eta'] = df_with_eta['kcat_app'] / df_with_eta['kcat_app_max']
+        
+        # Replace infinite values with NaN
+        df_with_eta['eta'] = df_with_eta['eta'].replace([float('inf'), float('-inf')], float('nan'))
+        
+        # Count valid eta values
+        valid_eta = df_with_eta['eta'].notna().sum()
+        print(f"  Calculated eta for {valid_eta} enzyme-substrate pairs")
+        
+        # Store the dataframe with eta
+        kapp_results_with_eta[condition_name] = df_with_eta
+        
+        # Collect eta values for variance calculation
+        eta_data = df_with_eta[['sequence', 'SMILES', 'eta']].copy()
+        eta_data['source_condition'] = condition_name
+        eta_data = eta_data[eta_data['eta'].notna()]  # Keep only valid eta values
+        
+        if len(eta_data) > 0:
+            all_eta_values.append(eta_data)
     
     # Calculate variance metrics for each enzyme-substrate pair
     print("\nCalculating variance metrics for each enzyme-substrate pair...")

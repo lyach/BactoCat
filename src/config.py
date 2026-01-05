@@ -103,8 +103,8 @@ class FluxConfig(BaseModel):
 class ProteomicsConfig(BaseModel):
     """Configuration for proteomics data parameters."""
     
-    p_total: list[float] = Field(
-        description="List of total protein fractions to test"
+    p_total: float = Field(
+        description="Total protein fraction (g protein / g DCW)"
     )
     paxdb_path: Path = Field(
         description="Path to PaxDB proteomics data file"
@@ -185,8 +185,8 @@ class PipelineConfig(BaseModel):
     )
     
     # Proteomics
-    p_total: list[float] = Field(
-        description="Total protein fractions to test"
+    p_total: float = Field(
+        description="Total protein fraction (g protein / g DCW)"
     )
     paxdb_path: Path = Field(
         description="Path to PaxDB file"

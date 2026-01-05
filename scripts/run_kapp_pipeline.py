@@ -177,7 +177,7 @@ def run_kapp_pipeline(
     except Exception as e:
         raise RuntimeError(f"Error creating FVA dataframe: {e}")
     
-    logger.info("Integrating FVA results with fluxomics data...")
+    logger.info("Integrating FVA results with fluxomics data")
     try:
         filtered_fluxomics_df, violations_df = FVA_integration(fluxomics_df, fva_df, filter=True)
         fluxomics_df = filtered_fluxomics_df.copy()
@@ -361,7 +361,7 @@ Output:
         logger.info(f"Oxygen uptake rates: {config.oxygen_uptake}")
         logger.info(f"Carbon exchange rxn: {config.carbon_exchange_rxn}")
         logger.info(f"Oxygen exchange rxn: {config.oxygen_exchange_rxn}")
-    logger.info(f"P_total values: {config.p_total}")
+    logger.info(f"P_total: {config.p_total}")
     logger.info(f"Substrate data: {config.substrate_df.name if config.substrate_df else 'Auto-generated'}")
     logger.info(f"Sequence data: {config.sequence_df.name if config.sequence_df else 'Auto-generated'}")
     logger.info(f"PaxDB data: {config.paxdb_path.name}")
