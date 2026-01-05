@@ -157,10 +157,12 @@ class PipelineConfig(BaseModel):
         default="pFBA",
         description="Flux analysis method"
     )
-    carbon_uptake: list[float] = Field(
+    carbon_uptake: Optional[list[float]] = Field(
+        default=None,
         description="Carbon uptake rates to test"
     )
-    oxygen_uptake: list[float] = Field(
+    oxygen_uptake: Optional[list[float]] = Field(
+        default=None,
         description="Oxygen uptake rates to test"
     )
     carbon_exchange_rxn: str = Field(
@@ -176,6 +178,10 @@ class PipelineConfig(BaseModel):
         ge=0.0,
         le=1.0,
         description="Growth rate fraction for FVA"
+    )
+    medium_df: Optional[Path] = Field(
+        default=None,
+        description="Path to medium conditions CSV"
     )
     
     # Proteomics
@@ -206,7 +212,7 @@ class PipelineConfig(BaseModel):
         description="Lower kcat threshold (s⁻¹)"
     )
     
-    @field_validator('model_path', 'paxdb_path', 'substrate_df', 'sequence_df', mode='before')
+    @field_validator('model_path', 'paxdb_path', 'substrate_df', 'sequence_df', 'medium_df', mode='before')
     @classmethod
     def convert_to_path(cls, v):
         """Convert string paths to Path objects."""
@@ -224,6 +230,16 @@ class PipelineConfig(BaseModel):
             raise ValueError(f"Model file not found: {self.model_path}")
         if self.paxdb_path.is_absolute() and not self.paxdb_path.exists():
             raise ValueError(f"PaxDB file not found: {self.paxdb_path}")
+        return self
+    
+    @model_validator(mode='after')
+    def validate_flux_inputs(self):
+        """Validate that either medium_df, or both carbon/oxygen uptake are provided."""
+        if self.medium_df is None:
+            if self.carbon_uptake is None or self.oxygen_uptake is None:
+                raise ValueError(
+                    "Either 'medium_df', or both 'carbon_uptake' and 'oxygen_uptake' must be provided."
+                )
         return self
     
     def resolve_paths(self, yaml_dir: Path, project_root: Path) -> "PipelineConfig":
@@ -270,6 +286,7 @@ class PipelineConfig(BaseModel):
             carbon_exchange_rxn=self.carbon_exchange_rxn,
             oxygen_exchange_rxn=self.oxygen_exchange_rxn,
             mu_fraction=self.mu_fraction,
+            medium_df=resolve(self.medium_df),
             p_total=self.p_total,
             paxdb_path=resolve(self.paxdb_path),
             substrate_df=resolve(self.substrate_df),

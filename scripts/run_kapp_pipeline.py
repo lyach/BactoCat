@@ -138,6 +138,16 @@ def run_kapp_pipeline(
     # ==== STEP 2: Run fluxomics simulations ====
     logger.info("=" * 50)
     logger.info(f"STEP 2: Run {config.flux_method} fluxomics simulations")
+    
+    # Load medium_df if provided
+    medium_df_loaded = None
+    if config.medium_df is not None and config.medium_df.exists():
+        try:
+            medium_df_loaded = pd.read_csv(config.medium_df)
+            logger.info(f"Medium dataframe loaded: {len(medium_df_loaded)} conditions from {config.medium_df.name}")
+        except Exception as e:
+            raise ValueError(f"Error loading medium_df from {config.medium_df}: {e}")
+    
     fluxomics_df = create_fluxomics_dataframe(
         flux_method=config.flux_method,
         GEM=model,
@@ -145,6 +155,7 @@ def run_kapp_pipeline(
         oxygen_uptake=config.oxygen_uptake,
         carbon_exchange_rxn=config.carbon_exchange_rxn,
         oxygen_exchange_rxn=config.oxygen_exchange_rxn,
+        medium_df=medium_df_loaded,
     )
     
     # ==== STEP 3: Run flux variability analysis ====
@@ -160,6 +171,7 @@ def run_kapp_pipeline(
             solver=config.solver,
             carbon_exchange_rxn=config.carbon_exchange_rxn,
             oxygen_exchange_rxn=config.oxygen_exchange_rxn,
+            medium_df=medium_df_loaded,
         )
         logger.info("FVA dataframe created successfully")
     except Exception as e:
@@ -342,10 +354,13 @@ Output:
     logger.info(f"Model: {config.model_path.name}")
     logger.info(f"Flux method: {config.flux_method}")
     logger.info(f"Solver: {config.solver}")
-    logger.info(f"Carbon uptake rates: {config.carbon_uptake}")
-    logger.info(f"Oxygen uptake rates: {config.oxygen_uptake}")
-    logger.info(f"Carbon exchange rxn: {config.carbon_exchange_rxn}")
-    logger.info(f"Oxygen exchange rxn: {config.oxygen_exchange_rxn}")
+    if config.medium_df is not None:
+        logger.info(f"Medium dataframe: {config.medium_df.name}")
+    else:
+        logger.info(f"Carbon uptake rates: {config.carbon_uptake}")
+        logger.info(f"Oxygen uptake rates: {config.oxygen_uptake}")
+        logger.info(f"Carbon exchange rxn: {config.carbon_exchange_rxn}")
+        logger.info(f"Oxygen exchange rxn: {config.oxygen_exchange_rxn}")
     logger.info(f"P_total values: {config.p_total}")
     logger.info(f"Substrate data: {config.substrate_df.name if config.substrate_df else 'Auto-generated'}")
     logger.info(f"Sequence data: {config.sequence_df.name if config.sequence_df else 'Auto-generated'}")
