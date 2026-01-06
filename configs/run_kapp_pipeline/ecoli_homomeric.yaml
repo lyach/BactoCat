@@ -19,7 +19,7 @@ oxygen_exchange_rxn: "EX_o2_e"
 mu_fraction: 0.9
 
 # ==== Proteomics Parameters ====
-p_total: [0.32, 0.435, 0.55]
+p_total: 0.55
 paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
 
 # ==== Input Data Files  ====
