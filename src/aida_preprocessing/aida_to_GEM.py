@@ -11,7 +11,7 @@ import argparse
 import csv
 from pathlib import Path
 
-import cobra
+import cobra 
 import pandas as pd
 from loguru import logger
 
@@ -31,8 +31,8 @@ def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
         "Alanine (mM)": "EX_ala__L_e",
         "Arginine/HCl (mM)": "EX_arg__L_e",
         "Asparagine/H2O (mM)": "EX_asn__L_e",
-        "Aspartic Acid (mM)": "EX_asp__L_e",
-        "Glutamic Acid/HCl (mM)": "EX_glu__L_e",
+        "AsparticAcid (mM)": "EX_asp__L_e",
+        "GlutamicAcid/HCl (mM)": "EX_glu__L_e",
         "Glutamine (mM)": "EX_gln__L_e",
         "Glycine (mM)": "EX_gly_e",
         "Histidine/HCl/H2O (mM)": "EX_his__L_e",
@@ -51,38 +51,36 @@ def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
         "Thiamine/HCl (mM)": "EX_thm_e",
         "Pyridoxine (mM)": "EX_pydxn_e",
 
+        "(NH4)2SO4 (mM)": "EX_nh4_e",  # Maps concentration directly to Nitrogen
+        "NH4Cl (mM)": "EX_nh4_e",       # Maps concentration directly to Nitrogen
+        "K2HPO4 (mM)": "EX_pi_e",       # Maps to Phosphorus
+        "MgSO4/7H2O (mM)": "EX_mg2_e",  # Maps to Magnesium
 
     }
 
-    print(f"Length of single matches: {len(single_matches)}")
+    # log the number of single matches
+    logger.info(f"Length of single matches: {len(single_matches)}")
 
     ambiguous_matches = {
-        "K2HPO4 (mM)": "EX_pi_e",
+        #"K2HPO4 (mM)": "EX_pi_e",
         "KH2PO4 (mM)": "EX_k_e",
         "Na2HPO4 (mM)": "EX_na1_e",
 
-        "(NH4)2SO4 (mM)": ["EX_nh4_e", "EX_so4_e"], # check 
-        "NH4Cl (mM)": ["EX_nh4_e", "EX_cl_e"],
+        #"(NH4)2SO4 (mM)": ["EX_nh4_e", "EX_so4_e"], 
+        #"NH4Cl (mM)": ["EX_nh4_e", "EX_cl_e"],
 
-        "Cystine/HCl/H2O (mM)": ["CYSTL", "cysi__L","cys__L"],
+        "Cystine/HCl/H2O (mM)": ["EX_cys__L_e"],
 
-        "KCl (mM)": ["Kabcpp", "Kt2pp", "EX_k_e"],
-        "NaCl (mM)": ["NAt3_1p5pp", "NAt3_2pp", "EX_na1_e"],
+        "KCl (mM)": ["EX_k_e"],
+        "NaCl (mM)": ["EX_na1_e"],
 
-        "MgCl2/6H2O (mM)": ["MG2uabcpp", "EX_mg2_e"],
-        "MgSO4/7H2O (mM)": ["EX_mg2_e", "EX_so4_e"],
+        "MgCl2/6H2O (mM)": ["EX_mg2_e"],
+        #"MgSO4/7H2O (mM)": ["EX_mg2_e", "EX_so4_e"],
 
         "CaSO4/2H2O (mM)": ["EX_ca2_e", "EX_so4_e"],
         "CaCl2/2H2O (mM)": "EX_ca2_e",
 
         "FeSO4/7H2O (mM)": ["FE2abcpp", "EX_fe2_e"],
-
-        "Folic Acid (mM)": ["FTHFD", "DHFR"],
-        "Aminobenzoic Acid (mM)": ["ADCL", "DHPS2"],
-
-        "H3BO3 (mM)": ["hbo3_e"],
-
-        "Riboflavin (mM)": ["ribflv_c"],
 
         "ZnSO4/7H2O (mM)": "EX_zn2_e",
         
@@ -93,7 +91,12 @@ def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
 
     }
 
-    print(f"Length of ambiguous matches: {len(ambiguous_matches)}")
+    # log the number of ambiguous matches
+    logger.info(f"Length of ambiguous matches: {len(ambiguous_matches)}")
+
+    # log the number of single and ambiguous matches combined
+    total_matches = len(single_matches) + len(ambiguous_matches)
+    logger.info(f"Total number of AIDA single + ambiguous matches: {total_matches}")
 
     valid_rxns = {r.id for r in model.reactions}
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -117,6 +120,36 @@ def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
     logger.info(f"Wrote supplementary mapping CSV → {out_csv}")
     return out_csv
 
+# ---------------------------------------------------------------------
+# Build Mapping Matrix for salts
+# ---------------------------------------------------------------------
+
+
+def build_mapping_matrix(mapping_csv: Path, media_columns: list) -> pd.DataFrame:
+    """
+    Converts the mapping CSV into a Stoichiometric Matrix (M).
+    Rows: AIDA Compounds
+    Cols: GEM Reactions
+    """
+    map_df = pd.read_csv(mapping_csv)
+    
+    # Only include AIDA compounds that actually appear in our media CSV
+    present_aida_cols = [c for c in map_df["AIDA_compound"].unique() if c in media_columns]
+    unique_gem_rxns = map_df["gem_rxn"].unique()
+
+    # Initialize the Matrix M with zeros
+    M = pd.DataFrame(0.0, index=present_aida_cols, columns=unique_gem_rxns)
+
+    # Populate M with stoichiometry
+    for _, row in map_df.iterrows():
+        comp = row["AIDA_compound"]
+        rxn = row["gem_rxn"]
+        val = row["stoichiometry"]
+        if comp in M.index:
+            M.loc[comp, rxn] = val
+            
+    logger.info(f"Built mapping matrix: {M.shape[0]} AIDA compounds -> {M.shape[1]} GEM reactions")
+    return M
 
 # ---------------------------------------------------------------------
 # MEDIA + GROWTH CSV
@@ -173,24 +206,51 @@ def create_media_growth_csv(
         if col in comp_to_rxn
     }
 
+    # CALCULATE NOT RENAMED BEFORE FILTERING
+    # We find columns that are NOT in our rename dict and NOT the ID column
+    not_renamed_cols = [
+        col for col in media_df.columns 
+        if col not in rename_cols and col != "Condition ID"
+    ]
+
+    # Log the counts and the specific names
+    num_renamed = len(rename_cols)
+    num_not_renamed = len(not_renamed_cols)
+    
+    logger.info(f"Renamed {num_renamed} media columns to GEM exchange reactions.")
+    logger.info(f"{num_not_renamed} media columns were not renamed.")
+    logger.info(f"Columns not renamed: {not_renamed_cols}")
+
+    # NOW rename and filter the dataframe
     media_df = media_df.rename(columns=rename_cols)
-
     gem_rxns = list(rename_cols.values())
-
     media_df = media_df[["Condition ID"] + gem_rxns]
 
     # ------------------------------------------------------------
     # Deduplicate by unique media composition
     # ------------------------------------------------------------
+    
+    logger.info(f"Number of media compositions before dropping duplicates→ {media_df.shape[0]}")
+
     media_df = (
         media_df
         .drop_duplicates(subset=gem_rxns) # remove duplicate media compositions
         .reset_index(drop=True)
     )
+    logger.info(f"Unique media compositions after dropping duplicates → {media_df.shape[0]}")
 
     # ------------------------------------------------------------
     # Get average growth data
     # ------------------------------------------------------------
+
+    # 1. Log the absolute total first
+    logger.info(f"Total growth entries in CSV: {len(growth_df)}")
+
+    # 2. Log the breakdown (for your information)
+    logger.info(f"Entries with r_info = 1: {len(growth_df[growth_df['r_info'] == 1])}")
+    logger.info(f"Entries with r_info = 2: {len(growth_df[growth_df['r_info'] == 2])}")
+
+    # 3. Perform the filter
     growth_df = growth_df[growth_df["r_info"].isin([0])] # only keep r_info = 0
 
     avg_growth = (
@@ -199,6 +259,8 @@ def create_media_growth_csv(
         .agg(avg_growth=("r", "mean")) # average growth rate (r)
     )
 
+    # 4. Log the result after filtering
+    logger.info(f"Growth entries remaining (r_info = 0): {len(growth_df)}")
     # ------------------------------------------------------------
     # Merge media + growth
     # ------------------------------------------------------------
