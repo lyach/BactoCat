@@ -130,11 +130,6 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
     media_df = pd.read_csv(media_csv)
     growth_df = pd.read_csv(growth_csv)
 
-    # Preserve original
-    orig_path = aida_dir / "media_composition_original.csv"
-    media_df.to_csv(orig_path, index=False)
-    logger.info(f"Preserved original media CSV → {orig_path}")
-
     # Normalize media column names
     media_df.columns = (
         media_df.columns
@@ -211,13 +206,10 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
 # ---------------------------------------------------------------------
 
 def main():
-    # Force GLPK to bypass expired Gurobi license before loading model
-    cobra.Configuration().solver = "glpk"
-
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", required=True, type=Path)
-    parser.add_argument("--aida_dir", required=True, type=Path)
-    parser.add_argument("--output_dir", required=True, type=Path)
+    parser.add_argument("--model_path", type=Path, default=Path("data/raw/gems/iml1515.xml"))
+    parser.add_argument("--aida_dir", type=Path, default=Path("data/raw/ecoli_aida_dataset"))
+    parser.add_argument("--output_dir", type=Path, default=Path("data/processed/ecoli_aida_dataset"))
     args = parser.parse_args()
 
     logger.info(f"Loading GEM → {args.model_path}")
