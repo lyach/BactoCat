@@ -7,7 +7,7 @@ import numpy as np
 from loguru import logger
 
 # ---------------------------------------------------------------------
-# 1. SUPPLEMENTARY MAPPING CSV (The "Database")
+# 1. SUPPLEMENTARY MAPPING CSV 
 # ---------------------------------------------------------------------
 
 def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
@@ -99,7 +99,7 @@ def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
     return out_csv
 
 # ---------------------------------------------------------------------
-# 2. MATRIX BUILDER (New Helper)
+# 2. MATRIX BUILDER 
 # ---------------------------------------------------------------------
 
 def build_mapping_matrix(mapping_csv: Path, media_columns: list) -> pd.DataFrame:
@@ -120,12 +120,12 @@ def build_mapping_matrix(mapping_csv: Path, media_columns: list) -> pd.DataFrame
     return M
 
 # ---------------------------------------------------------------------
-# 3. MEDIA + GROWTH CSV (Transformation Engine)
+# 3. MEDIA + GROWTH CSV 
 # ---------------------------------------------------------------------
 
 def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path) -> Path:
-    media_csv = aida_dir / "medium_composition.csv"
-    growth_csv = aida_dir / "growth_data.csv"
+    media_csv = aida_dir / "medium_composition.csv" # AIDA media compositions
+    growth_csv = aida_dir / "growth_data.csv" # AIDA growth data
 
     media_df = pd.read_csv(media_csv)
     growth_df = pd.read_csv(growth_csv)
@@ -199,24 +199,103 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
     logger.info(f"Wrote final media + growth CSV → {out_csv}")
     logger.info(f"Final unique conditions → {final_df.shape[0]}")
 
-    return out_csv
+    return final_df, out_csv
+
+# ------------------------------------------------------------
+# Check against corrected medium compositions
+# ------------------------------------------------------------
+
+def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -> Path:
+    amns_media_csv = amns_dir / "correct_med_iml1515.csv"
+    if not amns_media_csv.exists():
+        logger.error(f"Correction file not found: {amns_media_csv}")
+        return None
+
+    # -----------------------------
+    # Load + normalize AMNS table
+    # -----------------------------
+    amns_media_df = pd.read_csv(amns_media_csv)
+
+    # Strip whitespace from rxn names (CRITICAL)
+    amns_media_df["rxn"] = amns_media_df["rxn"].astype(str).str.strip()
+
+    # Build correction map: {EX_xxx_i -> flux}
+    correction_map = dict(
+        zip(amns_media_df["rxn"], amns_media_df["flux"])
+    )
+
+    # -----------------------------
+    # Prepare corrected medium dataframe
+    # -----------------------------
+    corrected_df = final_df.copy()
+
+    # Normalize column names
+    corrected_df.columns = [c.strip() for c in corrected_df.columns]
+
+    base_cols = [
+        c for c in corrected_df.columns
+        if c not in ["Condition ID", "avg_growth"]
+    ]
+
+    # -----------------------------
+    # Remove suffix from columns for matching
+    # -----------------------------
+    num_corrected = 0
+    missing = set()
+
+    for col in base_cols:
+        suffixed_col = f"{col}_i"
+
+        if suffixed_col in correction_map:
+            corrected_df[col] = correction_map[suffixed_col]
+            num_corrected += 1
+        else:
+            missing.add(col)
+
+    # -----------------------------
+    # Add suffix to columns after correction
+    # -----------------------------
+    corrected_df.rename(
+        columns={c: f"{c}_i" for c in base_cols},
+        inplace=True
+    )
+
+    # -----------------------------
+    # Save output
+    # -----------------------------
+    corrected_csv = output_dir / "corrected_media_compositions.csv"
+    corrected_df.to_csv(corrected_csv, index=False)
+
+    # -----------------------------
+    # Logging numbers
+    # -----------------------------
+    logger.info(f"Matches found and corrected: {num_corrected}")
+    logger.info(f"AMNS reactions not matched (len(correct_med_iml1515) - len(corrected_df)): {len(correction_map) - num_corrected}")
+    logger.info(f"Final corrected media saved to {corrected_csv}")
+
+    #logger.info(f"AIDA reactions missing in AMNS: {missing}")
+
+    return corrected_csv
+
 
 # ---------------------------------------------------------------------
-# 4. MAIN (Includes License-Fix)
+# 4. MAIN 
 # ---------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=Path, default=Path("data/raw/gems/iml1515.xml"))
     parser.add_argument("--aida_dir", type=Path, default=Path("data/raw/ecoli_aida_dataset"))
+    parser.add_argument("--amns_dir", type=Path, default=Path("data/raw/ecoli_aida_dataset"))
     parser.add_argument("--output_dir", type=Path, default=Path("data/processed/ecoli_aida_dataset"))
     args = parser.parse_args()
-
+ 
     logger.info(f"Loading GEM → {args.model_path}")
     model = cobra.io.read_sbml_model(str(args.model_path))
 
     mapping_csv = create_supplementary_csv(model, args.output_dir)
-    create_media_growth_csv(args.aida_dir, mapping_csv, args.output_dir)
+    final_df, out_csv = create_media_growth_csv(args.aida_dir, mapping_csv, args.output_dir)
+    corrected_csv = match_amns_media(args.amns_dir, args.output_dir, final_df)
 
 if __name__ == "__main__":
     main()
