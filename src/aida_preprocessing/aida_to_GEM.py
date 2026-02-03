@@ -123,7 +123,7 @@ def build_mapping_matrix(mapping_csv: Path, media_columns: list) -> pd.DataFrame
 # 3. MEDIA + GROWTH CSV 
 # ---------------------------------------------------------------------
 
-def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path) -> Path:
+def create_media_growth_csv(aida_dir: Path, mapping_csv: Path) -> pd.DataFrame:
     media_csv = aida_dir / "medium_composition.csv" # AIDA media compositions
     growth_csv = aida_dir / "growth_data.csv" # AIDA growth data
 
@@ -192,14 +192,10 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
 
     # Reorder columns
     final_df = final_df[["Condition ID", "avg_growth"] + gem_rxns]
-
-    out_csv = output_dir / "ecoli_aida_media_growth.csv"
-    final_df.to_csv(out_csv, index=False)
-
-    logger.info(f"Wrote final media + growth CSV → {out_csv}")
+    
     logger.info(f"Final unique conditions → {final_df.shape[0]}")
 
-    return final_df, out_csv
+    return final_df
 
 # ------------------------------------------------------------
 # Check against corrected medium compositions
@@ -238,43 +234,57 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
     ]
 
     # -----------------------------
-    # Remove suffix from columns for matching
+    # Rename columns to add '_i' suffix (for columns that don't already have it)
     # -----------------------------
-    num_corrected = 0
-    missing = set()
-
+    num_renamed = 0
+    rename_map = {}
+    
     for col in base_cols:
-        suffixed_col = f"{col}_i"
-
-        if suffixed_col in correction_map:
-            corrected_df[col] = correction_map[suffixed_col]
-            num_corrected += 1
+        if not col.endswith("_i"):
+            suffixed_col = f"{col}_i"
+            rename_map[col] = suffixed_col
+            num_renamed += 1
+    
+    if rename_map:
+        corrected_df.rename(columns=rename_map, inplace=True)
+    
+    # -----------------------------
+    # Verify columns exist in AMNS reference
+    # -----------------------------
+    num_matched = 0
+    missing_in_amns = set()
+    
+    # Get updated column names after renaming
+    updated_cols = [
+        c for c in corrected_df.columns
+        if c not in ["Condition ID", "avg_growth"]
+    ]
+    
+    for col in updated_cols:
+        if col in correction_map:
+            num_matched += 1
         else:
-            missing.add(col)
-
-    # -----------------------------
-    # Add suffix to columns after correction
-    # -----------------------------
-    corrected_df.rename(
-        columns={c: f"{c}_i" for c in base_cols},
-        inplace=True
-    )
+            missing_in_amns.add(col)
+            
+    # Keep only unique condition IDs
+    corrected_df = corrected_df.drop_duplicates(subset=["Condition ID"])
 
     # -----------------------------
     # Save output
     # -----------------------------
-    corrected_csv = output_dir / "corrected_media_compositions.csv"
+    corrected_csv = output_dir / "ecoli_aida_media_growth.csv"
     corrected_df.to_csv(corrected_csv, index=False)
 
     # -----------------------------
     # Logging numbers
     # -----------------------------
-    logger.info(f"Matches found and corrected: {num_corrected}")
-    logger.info(f"AMNS reactions not matched (len(correct_med_iml1515) - len(corrected_df)): {len(correction_map) - num_corrected}")
-    logger.info(f"Final corrected media saved to {corrected_csv}")
-
-    #logger.info(f"AIDA reactions missing in AMNS: {missing}")
-
+    logger.info(f"Columns matched and renamedwith AMNS reference: {num_matched}/{len(updated_cols)}")
+    logger.info(f"Final media data saved to {corrected_csv}")
+    
+    if missing_in_amns:
+        logger.warning(f"Columns in data but missing in AMNS reference: {len(missing_in_amns)}")
+        logger.debug(f"Missing reactions: {missing_in_amns}")
+    
     return corrected_csv
 
 
@@ -286,7 +296,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=Path, default=Path("data/raw/gems/iml1515.xml"))
     parser.add_argument("--aida_dir", type=Path, default=Path("data/raw/ecoli_aida_dataset"))
-    parser.add_argument("--amns_dir", type=Path, default=Path("data/raw/ecoli_aida_dataset"))
+    parser.add_argument("--amns_dir", type=Path, default=Path("data/processed/amns"))
     parser.add_argument("--output_dir", type=Path, default=Path("data/processed/ecoli_aida_dataset"))
     args = parser.parse_args()
  
@@ -294,7 +304,7 @@ def main():
     model = cobra.io.read_sbml_model(str(args.model_path))
 
     mapping_csv = create_supplementary_csv(model, args.output_dir)
-    final_df, out_csv = create_media_growth_csv(args.aida_dir, mapping_csv, args.output_dir)
+    final_df = create_media_growth_csv(args.aida_dir, mapping_csv)
     corrected_csv = match_amns_media(args.amns_dir, args.output_dir, final_df)
 
 if __name__ == "__main__":
