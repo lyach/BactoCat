@@ -51,6 +51,7 @@ misc/*
 notebooks/*
 data/external_databases/
 results/*
+logs/*
 
 # Cache files
 cache/
