@@ -249,7 +249,16 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
             
     # Keep only unique condition IDs
     corrected_df = corrected_df.drop_duplicates(subset=["Condition ID"])
-
+    
+    # Rename growth column
+    corrected_df.rename(columns={"avg_growth": "GR_AVG"}, inplace=True)
+    
+    # Drop Condition ID column
+    corrected_df.drop(columns=["Condition ID"], inplace=True)
+    
+    # Reorder columns
+    corrected_df = corrected_df[updated_cols + ["GR_AVG"]]
+    
     # Save output
     corrected_csv = output_dir / "ecoli_aida_media_growth_amns.csv"
     corrected_df.to_csv(corrected_csv, index=False)
