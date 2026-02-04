@@ -123,7 +123,7 @@ def build_mapping_matrix(mapping_csv: Path, media_columns: list) -> pd.DataFrame
 # 3. MEDIA + GROWTH CSV 
 # ---------------------------------------------------------------------
 
-def create_media_growth_csv(aida_dir: Path, mapping_csv: Path) -> pd.DataFrame:
+def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path) -> pd.DataFrame:
     media_csv = aida_dir / "medium_composition.csv" # AIDA media compositions
     growth_csv = aida_dir / "growth_data.csv" # AIDA growth data
 
@@ -193,7 +193,12 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path) -> pd.DataFrame:
     # Reorder columns
     final_df = final_df[["Condition ID", "avg_growth"] + gem_rxns]
     
+    # Keep only unique condition IDs
+    final_df = final_df.drop_duplicates(subset=["Condition ID"])
+    final_df.to_csv(output_dir / "ecoli_aida_media_growth.csv", index=False)
+    
     logger.info(f"Final unique conditions → {final_df.shape[0]}")
+    logger.info(f"Final media data saved to {output_dir / 'ecoli_aida_media_growth.csv'}")
 
     return final_df
 
@@ -272,13 +277,13 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
     # -----------------------------
     # Save output
     # -----------------------------
-    corrected_csv = output_dir / "ecoli_aida_media_growth.csv"
+    corrected_csv = output_dir / "ecoli_aida_media_growth_amns.csv"
     corrected_df.to_csv(corrected_csv, index=False)
 
     # -----------------------------
     # Logging numbers
     # -----------------------------
-    logger.info(f"Columns matched and renamedwith AMNS reference: {num_matched}/{len(updated_cols)}")
+    logger.info(f"Columns matched and renamed with AMNS reference: {num_matched}/{len(updated_cols)}")
     logger.info(f"Final media data saved to {corrected_csv}")
     
     if missing_in_amns:
@@ -304,7 +309,7 @@ def main():
     model = cobra.io.read_sbml_model(str(args.model_path))
 
     mapping_csv = create_supplementary_csv(model, args.output_dir)
-    final_df = create_media_growth_csv(args.aida_dir, mapping_csv)
+    final_df = create_media_growth_csv(args.aida_dir, mapping_csv, args.output_dir)
     corrected_csv = match_amns_media(args.amns_dir, args.output_dir, final_df)
 
 if __name__ == "__main__":
