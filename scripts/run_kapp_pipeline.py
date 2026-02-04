@@ -9,17 +9,19 @@ Usage:
     python -m scripts.run_kapp_pipeline config.yaml
 """
 
+# Command line interface
 import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
 import random
 
+# Scientific libraries
 import cobra
 import pandas as pd
 from loguru import logger
 
-# Module imports (no sys.path hack needed when package is installed)
+# Module imports
 from src.config import PipelineConfig, load_config, PROJ_ROOT, ensure_dir_exists
 from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
 from src.gene_sequence_mapper import map_organism_to_uniprot

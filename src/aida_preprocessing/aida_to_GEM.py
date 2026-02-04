@@ -6,9 +6,7 @@ import pandas as pd
 import numpy as np
 from loguru import logger
 
-# ---------------------------------------------------------------------
-# 1. SUPPLEMENTARY MAPPING CSV 
-# ---------------------------------------------------------------------
+# ==== STEP 1: Create supplementary mapping CSV ====
 
 def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
     """
@@ -66,7 +64,7 @@ def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
 
         # --- Iron and Trace Metals ---
         "FeSO4/7H2O (mM)": {"EX_fe2_e": 1.0, "EX_so4_e": 1.0},
-        "ZuSO4/7H2O (mM)": {"EX_zn2_e": 1.0, "EX_so4_e": 1.0}, # Zinc (typo in AIDA)
+        "ZuSO4/7H2O (mM)": {"EX_zn2_e": 1.0, "EX_so4_e": 1.0}, # Zinc (typo in Aida)
         "CuSO4/5H2O (mM)": {"EX_cu2_e": 1.0, "EX_so4_e": 1.0},
         "Na2MoO4/2H2O (mM)": {"EX_mobd_e": 1.0, "EX_na1_e": 2.0},
         
@@ -98,9 +96,7 @@ def create_supplementary_csv(model: cobra.Model, output_dir: Path) -> Path:
 
     return out_csv
 
-# ---------------------------------------------------------------------
-# 2. MATRIX BUILDER 
-# ---------------------------------------------------------------------
+# ==== STEP 2: Build mapping matrix ====
 
 def build_mapping_matrix(mapping_csv: Path, media_columns: list) -> pd.DataFrame:
     """Constructs M matrix: Rows=AIDA, Cols=GEM reactions."""
@@ -119,9 +115,7 @@ def build_mapping_matrix(mapping_csv: Path, media_columns: list) -> pd.DataFrame
     
     return M
 
-# ---------------------------------------------------------------------
-# 3. MEDIA + GROWTH CSV 
-# ---------------------------------------------------------------------
+# ==== STEP 3: Create media and growth CSV ====
 
 def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path) -> pd.DataFrame:
     media_csv = aida_dir / "medium_composition.csv" # AIDA media compositions
@@ -138,9 +132,7 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
         .str.strip()
     )
 
-    # ------------------------------------------------------------
-    # Build and Apply Mapping Matrix
-    # ------------------------------------------------------------
+    # Build and apply mapping matrix
     M = build_mapping_matrix(mapping_csv, media_df.columns.tolist())
     
     # Identify what was NOT renamed/mapped
@@ -161,16 +153,12 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
     media_gem_df = pd.concat([media_df[["Condition ID"]], gem_values_df], axis=1)
     gem_rxns = M.columns.tolist()
 
-    # ------------------------------------------------------------
     # Deduplicate by unique media composition
-    # ------------------------------------------------------------
     logger.info(f"Media compositions before dropping duplicates → {media_gem_df.shape[0]}")
     media_gem_df = media_gem_df.drop_duplicates(subset=gem_rxns).reset_index(drop=True)
     logger.info(f"Unique media compositions after dropping duplicates → {media_gem_df.shape[0]}")
 
-    # ------------------------------------------------------------
     # Get average growth data (r_info filtering)
-    # ------------------------------------------------------------
     logger.info(f"Total growth entries in CSV: {len(growth_df)}")
     logger.info(f"Entries with r_info = 1: {len(growth_df[growth_df['r_info'] == 1])}")
     logger.info(f"Entries with r_info = 2: {len(growth_df[growth_df['r_info'] == 2])}")
@@ -185,9 +173,7 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
         .agg(avg_growth=("r", "mean"))
     )
 
-    # ------------------------------------------------------------
     # Merge media + growth
-    # ------------------------------------------------------------
     final_df = pd.merge(media_gem_df, avg_growth, on="Condition ID", how="inner")
 
     # Reorder columns
@@ -202,9 +188,7 @@ def create_media_growth_csv(aida_dir: Path, mapping_csv: Path, output_dir: Path)
 
     return final_df
 
-# ------------------------------------------------------------
-# Check against corrected medium compositions
-# ------------------------------------------------------------
+# ==== STEP 4: Match against corrected medium compositions ====
 
 def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -> Path:
     amns_media_csv = amns_dir / "correct_med_iml1515.csv"
@@ -212,9 +196,7 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
         logger.error(f"Correction file not found: {amns_media_csv}")
         return None
 
-    # -----------------------------
-    # Load + normalize AMNS table
-    # -----------------------------
+    # Load and normalize AMNS table
     amns_media_df = pd.read_csv(amns_media_csv)
 
     # Strip whitespace from rxn names (CRITICAL)
@@ -225,9 +207,7 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
         zip(amns_media_df["rxn"], amns_media_df["flux"])
     )
 
-    # -----------------------------
     # Prepare corrected medium dataframe
-    # -----------------------------
     corrected_df = final_df.copy()
 
     # Normalize column names
@@ -238,9 +218,7 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
         if c not in ["Condition ID", "avg_growth"]
     ]
 
-    # -----------------------------
     # Rename columns to add '_i' suffix (for columns that don't already have it)
-    # -----------------------------
     num_renamed = 0
     rename_map = {}
     
@@ -253,9 +231,7 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
     if rename_map:
         corrected_df.rename(columns=rename_map, inplace=True)
     
-    # -----------------------------
     # Verify columns exist in AMNS reference
-    # -----------------------------
     num_matched = 0
     missing_in_amns = set()
     
@@ -274,15 +250,11 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
     # Keep only unique condition IDs
     corrected_df = corrected_df.drop_duplicates(subset=["Condition ID"])
 
-    # -----------------------------
     # Save output
-    # -----------------------------
     corrected_csv = output_dir / "ecoli_aida_media_growth_amns.csv"
     corrected_df.to_csv(corrected_csv, index=False)
 
-    # -----------------------------
     # Logging numbers
-    # -----------------------------
     logger.info(f"Columns matched and renamed with AMNS reference: {num_matched}/{len(updated_cols)}")
     logger.info(f"Final media data saved to {corrected_csv}")
     
@@ -293,9 +265,7 @@ def match_amns_media(amns_dir: Path, output_dir: Path, final_df: pd.DataFrame) -
     return corrected_csv
 
 
-# ---------------------------------------------------------------------
-# 4. MAIN 
-# ---------------------------------------------------------------------
+# ==== STEP 5: Main execution ====
 
 def main():
     parser = argparse.ArgumentParser()
