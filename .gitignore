@@ -52,6 +52,7 @@ notebooks/*
 data/external_databases/
 results/*
 logs/*
+slurm/*
 
 # Cache files
 cache/
