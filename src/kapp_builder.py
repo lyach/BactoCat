@@ -108,7 +108,7 @@ def create_fluxomics_dataframe(
             model_copy = GEM.copy()
             
             # Apply medium conditions using modify_reaction_bounds
-            modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=False)
+            modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=True)
             
             # Run FBA or pFBA
             if flux_method == 'FBA':
@@ -186,7 +186,7 @@ def create_fluxomics_dataframe(
     logger.info(f"Fluxomics dataframe created with {num_conditions} conditions")
     return fluxomics_df
 
-def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=False):
+def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True):
     """
     Modify reaction bounds in a COBRA model based on medium conditions.
     
@@ -211,6 +211,8 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=Fals
         return
     
     for rxn_id, flux_value in medium.items():
+        # Convert fluxes to negative (uptake)
+        flux_value = flux_value * -1
         try:
             rxn = model.reactions.get_by_id(rxn_id)
             rxn.lower_bound = flux_value
@@ -294,7 +296,7 @@ def create_FVA_dataframe(
             model_copy = base_model.copy()
             
             # Apply medium conditions using modify_reaction_bounds
-            modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=False)
+            modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=True)
             
             # Optimize
             solution = model_copy.optimize()

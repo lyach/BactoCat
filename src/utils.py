@@ -15,8 +15,50 @@ warnings.filterwarnings('ignore', category=RuntimeWarning)
 # Functions for Aida dataset preprocessing
 # =============================================================================
 
-
-
+def prepare_aida_dataset(df_pred_path: pd.DataFrame, 
+                         df_cond_path: pd.DataFrame) -> pd.DataFrame:
+    """
+    Prepare the Aida dataset to be used in the BactoCat pipeline.
+    """
+    # Load
+    df_pred = pd.read_csv(df_pred_path)
+    print(f"Loaded Aida predictions df with shape {df_pred.shape}")
+    
+    df_cond = pd.read_csv(df_cond_path)
+    print(f"Loaded Aida conditions df with shape {df_cond.shape}")
+    
+    # TO DO: Check where in the AMN pipeline this first condition is lost
+    # Add condition_id column to df_pred, and populate it with the Condition ID col from df_cond
+    #df_pred['condition_id'] = df_cond['Condition ID']
+    
+    # TEMPORARY: Add placeholder id
+    df_pred['condition_id'] = [f'cond{i+1}' for i in range(len(df_pred))]
+    
+    # Rename GR_AVG column to avg_growth
+    df_pred.rename(columns={'GR_AVG': 'avg_growth'}, inplace=True)
+    
+    # Rename all columns (except for condition_id and avg_growth) to remove the suffix '_i'
+    protected_cols = ['condition_id', 'avg_growth']
+    
+    new_columns = []
+    for col in df_pred.columns:
+        if col not in protected_cols and col.endswith('_i'):
+            new_columns.append(col[:-2]) # Remove last 2 chars
+        else:
+            new_columns.append(col)
+    
+    df_pred.columns = new_columns
+    
+    # Move condition_id and avg_growth columns to the front
+    cols = list(df_pred.columns)
+    for col in ['avg_growth', 'condition_id']:
+        if col in cols:
+            cols.insert(0, cols.pop(cols.index(col)))
+    
+    # Reorder columns
+    df_pred = df_pred[cols]
+    
+    return df_pred
 
 # =============================================================================
 # Functions for specific kcat datasets
@@ -26,6 +68,7 @@ def load_kcat_dataset_ecoli(CPIPred_dir, CatPred_dir, EnzyExtract_dir) -> pd.Dat
     """
     Load in vitro kcat datasets for E. coli.
     """
+    # Load
     CPIPred_df = pd.read_csv(CPIPred_dir)
     CatPred_df = pd.read_csv(CatPred_dir)
     EnzyExtract_df = pd.read_parquet(EnzyExtract_dir)
