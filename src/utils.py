@@ -27,9 +27,10 @@ def prepare_aida_dataset(df_pred_path: pd.DataFrame,
     df_cond = pd.read_csv(df_cond_path)
     print(f"Loaded Aida conditions df with shape {df_cond.shape}")
     
-    # TO DO: Check where in the AMN pipeline this first condition is lost
-    # Add condition_id column to df_pred, and populate it with the Condition ID col from df_cond
-    #df_pred['condition_id'] = df_cond['Condition ID']
+    # TO DO: Check that the number of conditions in df_cond 
+    # is the same as the number of conditions in df_pred
+    # and populate the condition_id column in df_pred with the Condition ID column from df_cond
+    # which has the og condition number from Aida & Ying
     
     # TEMPORARY: Add placeholder id
     df_pred['condition_id'] = [f'cond{i+1}' for i in range(len(df_pred))]

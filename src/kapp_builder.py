@@ -115,6 +115,8 @@ def create_fluxomics_dataframe(
                 solution = model_copy.optimize()
             elif flux_method == 'pFBA':
                 solution = flux_analysis.pfba(model_copy)
+                objective_value = solution.fluxes['BIOMASS_Ec_iML1515_core_75p37M']
+                logger.debug(f"Condition {condition_id} completed, growth rate = {objective_value:.4f} 1/h")
             else:
                 raise ValueError(f"Invalid method '{flux_method}'. Must be 'FBA' or 'pFBA'.")
             
@@ -156,15 +158,17 @@ def create_fluxomics_dataframe(
             # Run FBA or pFBA
             if flux_method == 'FBA':
                 solution = model_copy.optimize()
+                logger.debug(f"Condition {i} completed, growth rate = {solution.objective_value:.4f} 1/h")
             elif flux_method == 'pFBA':
                 solution = flux_analysis.pfba(model_copy)
+                objective_value = solution.fluxes['BIOMASS_Ec_iML1515_core_75p37M']
+                logger.debug(f"Condition {i} completed, growth rate = {objective_value:.4f} 1/h")
             else:
                 raise ValueError(f"Invalid method '{flux_method}'. Must be 'FBA' or 'pFBA'.")
             
             # Store results
             if solution.status == 'optimal':
                 flux_results[f'flux_cond{i}'] = [solution.fluxes[rxn_id] for rxn_id in rxn_ids]
-                logger.debug(f"Condition {i} completed successfully")
             else:
                 logger.warning(f"Condition {i} optimization failed with status: {solution.status}")
                 flux_results[f'flux_cond{i}'] = [0.0] * len(rxn_ids)
@@ -190,15 +194,23 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
     """
     Modify reaction bounds in a COBRA model based on medium conditions.
     
+    Uses the COBRApy model.medium property, which:
+      1. Closes ALL exchange reactions (lower_bound = 0)
+      2. Opens only the ones specified with the given uptake rate
+    
+    Free metabolites (water, protons, CO2) are kept unconstrained
+    regardless of what the medium dict specifies for them.
+    
     Parameters
     ----------
     model : cobra.Model
         The COBRA model to modify in-place
     medium : dict
-        Dictionary mapping reaction IDs to flux values
+        Dictionary mapping exchange reaction IDs to uptake rates
+        (positive values, as expected by model.medium)
     medium_upper_bound : bool, optional
-        If True, sets both lower and upper bounds to the flux value (fixes the reaction)
-        If False, only sets the lower bound
+        If True, also fixes the upper bound so the flux is locked
+        at the specified uptake value
     verbose : bool, optional
         If True, prints information about modified reactions
     
@@ -210,21 +222,61 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
     if medium is None:
         return
     
+    FREE_METABOLITES = {
+        'EX_h2o_e',
+        'EX_h_e',
+        'EX_co2_e',
+    }
+    DEFAULT_FREE_BOUND = 1000.0
+    
+    model_medium = model.medium
+    
+    for k in model_medium:
+        model_medium[k] = 0
+    
     for rxn_id, flux_value in medium.items():
-        # Convert fluxes to negative (uptake)
-        flux_value = flux_value * -1
-        try:
-            rxn = model.reactions.get_by_id(rxn_id)
-            rxn.lower_bound = flux_value
-            if medium_upper_bound:
-                rxn.upper_bound = flux_value
+        if rxn_id in FREE_METABOLITES:
+            model_medium[rxn_id] = DEFAULT_FREE_BOUND
             if verbose:
-                if medium_upper_bound:
-                    logger.debug(f"  Fixed {rxn_id}: lower={flux_value}, upper={flux_value}")
-                else:
-                    logger.debug(f"  Set {rxn_id}: lower={flux_value}, upper={rxn.upper_bound}")
-        except KeyError:
-            logger.warning(f"  Warning: Reaction provided '{rxn_id}' was not found in model")
+                logger.debug(f"  {rxn_id}: free metabolite, left unconstrained")
+            continue
+        
+        if rxn_id in model_medium:
+            model_medium[rxn_id] = abs(float(flux_value))
+        else:
+            logger.warning(f"  Reaction '{rxn_id}' not in model exchanges, skipping")
+    
+    for rxn_id in FREE_METABOLITES:
+        if rxn_id not in model_medium:
+            try:
+                model.reactions.get_by_id(rxn_id)
+                model_medium[rxn_id] = DEFAULT_FREE_BOUND
+            except KeyError:
+                pass
+    
+    model.medium = model_medium
+    
+    if verbose:
+        for rxn_id in medium:
+            if rxn_id in FREE_METABOLITES:
+                continue
+            try:
+                rxn = model.reactions.get_by_id(rxn_id)
+                logger.debug(f"  Set {rxn_id}: lower={rxn.lower_bound}, upper={rxn.upper_bound}")
+            except KeyError:
+                pass
+    
+    if medium_upper_bound:
+        for rxn_id, flux_value in medium.items():
+            if rxn_id in FREE_METABOLITES:
+                continue
+            try:
+                rxn = model.reactions.get_by_id(rxn_id)
+                rxn.upper_bound = rxn.lower_bound
+                if verbose:
+                    logger.debug(f"  Fixed {rxn_id}: lower={rxn.lower_bound}, upper={rxn.upper_bound}")
+            except KeyError:
+                pass
 
 
 def create_FVA_dataframe(
@@ -299,7 +351,9 @@ def create_FVA_dataframe(
             modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=True)
             
             # Optimize
+            # TO DO - is it necessary to do prev optimization for FVA?
             solution = model_copy.optimize()
+            print(f"Condition {condition_id}: Growth Rate = {solution.objective_value:.4f} 1/h")
             if solution.status != 'optimal':
                 logger.warning(f"Optimization failed at condition {condition_id} with status: {solution.status}, filling with NaNs.")
                 FVA_lower_results[f'FVA_lower_{condition_id}'] = [float('nan')] * len(rxn_ids)

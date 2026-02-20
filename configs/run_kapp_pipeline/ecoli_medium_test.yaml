@@ -8,7 +8,7 @@ solver: "cplex"
 flux_method: "pFBA"
 
 # ==== Flux Simulation Parameters ====
-medium_df: "data/raw/ecoli_aida_dataset/conditions_test.csv"
+medium_df: "data/raw/aidaying_amns/conditions_test.csv"
 
 # ==== Proteomics Parameters ====
 p_total: 0.55
