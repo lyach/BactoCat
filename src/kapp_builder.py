@@ -432,12 +432,8 @@ def create_FVA_dataframe(
         )
     
     # Build the output dataframe
-    fva_combined = pd.DataFrame({'rxn_id': rxn_ids})
-    
-    for col_name, values in FVA_lower_results.items():
-        fva_combined[col_name] = values
-    for col_name, values in FVA_upper_results.items():
-        fva_combined[col_name] = values
+    all_data = {'rxn_id': rxn_ids, **FVA_lower_results, **FVA_upper_results}
+    fva_combined = pd.DataFrame(all_data)
     
     logger.info(f"FVA dataframe created with {num_conditions} conditions")
     return fva_combined
