@@ -229,8 +229,9 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
     }
     DEFAULT_FREE_BOUND = 1000.0
     
-    model_medium = model.medium
+    exchange_ids = {rxn.id for rxn in model.exchanges}
     
+    model_medium = model.medium
     for k in model_medium:
         model_medium[k] = 0
     
@@ -241,18 +242,14 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
                 logger.debug(f"  {rxn_id}: free metabolite, left unconstrained")
             continue
         
-        if rxn_id in model_medium:
+        if rxn_id in exchange_ids:
             model_medium[rxn_id] = abs(float(flux_value))
         else:
-            logger.warning(f"  Reaction '{rxn_id}' not in model exchanges, skipping")
+            logger.warning(f"  Reaction '{rxn_id}' not found in model, skipping")
     
     for rxn_id in FREE_METABOLITES:
-        if rxn_id not in model_medium:
-            try:
-                model.reactions.get_by_id(rxn_id)
-                model_medium[rxn_id] = DEFAULT_FREE_BOUND
-            except KeyError:
-                pass
+        if rxn_id in exchange_ids:
+            model_medium[rxn_id] = DEFAULT_FREE_BOUND
     
     model.medium = model_medium
     
