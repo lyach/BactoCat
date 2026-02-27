@@ -18,6 +18,9 @@ paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
 substrate_df: "data/processed/substrates/iml1515_substrates.csv"
 sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"
 
+# ==== Folder ID for output directory====
+folder_id: "ecoli_test"
+
 # ==== Filtering Thresholds ====
 upper_threshold: 1.0e6   # Upper limit for kcat_app (s⁻¹)
 lower_threshold: 1.0e-5  # Lower limit for kcat_app (s⁻¹)

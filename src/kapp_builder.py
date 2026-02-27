@@ -116,7 +116,6 @@ def create_fluxomics_dataframe(
             elif flux_method == 'pFBA':
                 solution = flux_analysis.pfba(model_copy)
                 objective_value = solution.fluxes['BIOMASS_Ec_iML1515_core_75p37M']
-                logger.debug(f"Condition {condition_id} completed, growth rate = {objective_value:.4f} 1/h")
             else:
                 raise ValueError(f"Invalid method '{flux_method}'. Must be 'FBA' or 'pFBA'.")
             
@@ -158,11 +157,8 @@ def create_fluxomics_dataframe(
             # Run FBA or pFBA
             if flux_method == 'FBA':
                 solution = model_copy.optimize()
-                logger.debug(f"Condition {i} completed, growth rate = {solution.objective_value:.4f} 1/h")
             elif flux_method == 'pFBA':
                 solution = flux_analysis.pfba(model_copy)
-                objective_value = solution.fluxes['BIOMASS_Ec_iML1515_core_75p37M']
-                logger.debug(f"Condition {i} completed, growth rate = {objective_value:.4f} 1/h")
             else:
                 raise ValueError(f"Invalid method '{flux_method}'. Must be 'FBA' or 'pFBA'.")
             
@@ -349,13 +345,13 @@ def create_FVA_dataframe(
             
             # Optimize
             # TO DO - is it necessary to do prev optimization for FVA?
-            solution = model_copy.optimize()
-            print(f"Condition {condition_id}: Growth Rate = {solution.objective_value:.4f} 1/h")
-            if solution.status != 'optimal':
-                logger.warning(f"Optimization failed at condition {condition_id} with status: {solution.status}, filling with NaNs.")
-                FVA_lower_results[f'FVA_lower_{condition_id}'] = [float('nan')] * len(rxn_ids)
-                FVA_upper_results[f'FVA_upper_{condition_id}'] = [float('nan')] * len(rxn_ids)
-                continue
+            # COMMENTED OUT FOR NOW
+            # solution = model_copy.optimize()
+            # if solution.status != 'optimal':
+            #     logger.warning(f"Optimization failed at condition {condition_id} with status: {solution.status}, filling with NaNs.")
+            #     FVA_lower_results[f'FVA_lower_{condition_id}'] = [float('nan')] * len(rxn_ids)
+            #     FVA_upper_results[f'FVA_upper_{condition_id}'] = [float('nan')] * len(rxn_ids)
+            #     continue
             
             # Build FVA problem
             problem = cobra_to_fva_problem(model_copy, mu=mu_fraction)

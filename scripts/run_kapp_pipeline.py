@@ -179,17 +179,16 @@ def run_kapp_pipeline(
     except Exception as e:
         raise RuntimeError(f"Error creating FVA dataframe: {e}")
     
-    logger.info("Integrating FVA results with fluxomics data")
+    logger.info(f"Integrating FVA results with {config.flux_method} data")
     try:
         filtered_fluxomics_df, violations_df = FVA_integration(fluxomics_df, fva_df, filter=True)
         fluxomics_df = filtered_fluxomics_df.copy()
         
         # Save outputs
-        fva_df.to_csv(output_dir / f"FVA_bounds_{run_name}.csv", index=False)
         filtered_fluxomics_df.to_csv(output_dir / f"fluxomics_filtered_{run_name}.csv", index=False)
         violations_df.to_csv(output_dir / f"FVA_violations_{run_name}.csv", index=False)
         
-        logger.info(f"FVA integration complete. Filtered fluxomics: {filtered_fluxomics_df.shape[0]} rows")
+        logger.info(f"FVA integration complete")
         logger.info(f"Violations detected: {violations_df.shape[0]} rows")
     except Exception as e:
         raise RuntimeError(f"Error during FVA integration: {e}")
@@ -258,9 +257,13 @@ def run_kapp_pipeline(
     kmax_dfs = get_kmax_homomeric(kapp_dfs_filtered)
     
     # ==== STEP 11: Calculate eta values ====
-    logger.info("=" * 50)
-    logger.info("STEP 11: Calculate eta values")
-    kapp_dfs_eta, kmax_dfs_eta_var = get_eta(kapp_dfs_filtered, kmax_dfs)
+    if config.calculate_eta:
+        logger.info("=" * 50)
+        logger.info("STEP 11: Calculate eta values")
+        kapp_dfs_eta, kmax_dfs_eta_var = get_eta(kapp_dfs_filtered, kmax_dfs)
+    else:
+        kapp_dfs_eta = kapp_dfs_filtered
+        kmax_dfs_eta_var = kmax_dfs
     
     # ==== STEP 12: Save results ====
     logger.info("=" * 50)
@@ -320,11 +323,12 @@ Output:
     # Generate run name and setup directories
     current_date = datetime.now().strftime("%Y%m%d")
     random_id = random.randint(1000, 9999)
+    folder_name = f"{config.organism}_{config.folder_id}"
     run_name = f"{config.organism}_{current_date}_{random_id}"
     
     # Create output directories
     results_base = PROJ_ROOT / "results" / "run_kapp_pipeline"
-    run_root = results_base / run_name
+    run_root = results_base / folder_name
     output_dir = ensure_dir_exists(run_root / "results")
     data_dir = ensure_dir_exists(run_root / "data")
     

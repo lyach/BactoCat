@@ -144,6 +144,10 @@ class PipelineConfig(BaseModel):
     organism: str = Field(
         description="Organism name (e.g., 'ecoli', 'yeast')"
     )
+    folder_id: str = Field(
+        default="run",
+        description="ID for output directory organization (e.g., organism_folder_id)"
+    )
     model_path: Path = Field(
         description="Path to the SBML model file (.xml)"
     )
@@ -278,6 +282,7 @@ class PipelineConfig(BaseModel):
         
         return PipelineConfig(
             organism=self.organism,
+            folder_id=self.folder_id,
             model_path=resolve(self.model_path),
             solver=self.solver,
             flux_method=self.flux_method,
