@@ -7,7 +7,13 @@ Utility functions for the BactoCat pipeline.
 
 import pandas as pd
 import warnings
+import cobra
+
+from cobra import flux_analysis
 from rdkit import Chem
+
+from src.kapp_builder import modify_reaction_bounds
+
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
@@ -15,7 +21,61 @@ warnings.filterwarnings('ignore', category=RuntimeWarning)
 # Modeling functions
 # =============================================================================
 
-def
+def get_constrained_growth(model: cobra.Model, 
+                           medium_df: pd.DataFrame,
+                           biomass_rxn: str = "BIOMASS_Ec_iML1515_core_75p37M",
+                           method: str = "pFBA") -> pd.DataFrame:
+    """
+    Get the constrained growth rate of a model given a medium dataframe.
+    
+    Parameters
+    ----------
+    model : cobra.Model
+        The COBRA model to optimize
+    medium_df : pd.DataFrame
+        The medium dataframe to use for the optimization
+    biomass_rxn : str, optional
+        The biomass reaction to use for the optimization
+    method : str, optional
+        The method to use for the optimization (FBA or pFBA)
+
+    Returns
+    -------
+    pd.DataFrame
+        A dataframe with columns 'condition_id', 'growth_exp', and 'growth_sim'
+    """
+    non_medium_cols = {'condition_id', 'avg_growth'}
+    results = []
+
+    for _, row in medium_df.iterrows():
+        condition_id = row['condition_id']
+        avg_growth = row['avg_growth']
+
+        medium_dict = {
+            col: row[col]
+            for col in medium_df.columns
+            if col not in non_medium_cols
+        }
+
+        with model:
+            modify_reaction_bounds(model, medium_dict, medium_upper_bound=False, verbose=True)
+
+            if method == "FBA":
+                solution = model.optimize()
+            elif method == "pFBA":
+                solution = flux_analysis.pfba(model)
+            else:
+                raise ValueError(f"Invalid method '{method}'. Must be 'FBA' or 'pFBA'.")
+
+            growth_sim = solution.fluxes[biomass_rxn]
+
+        results.append({
+            'condition_id': condition_id,
+            'growth_exp': avg_growth,
+            'growth_sim': growth_sim
+        })
+
+    return pd.DataFrame(results)
 
 # =============================================================================
 # Functions for Aida dataset preprocessing
