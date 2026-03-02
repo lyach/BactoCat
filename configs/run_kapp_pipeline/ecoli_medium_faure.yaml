@@ -8,7 +8,7 @@ solver: "cplex"
 flux_method: "FBA"
 
 # ==== Flux Simulation Parameters ====
-medium_df: "data/processed/aidaying_amns/faure_amn_medium_small.csv"
+medium_df: "data/processed/amns/faure_amn_medium_small.csv"
 
 # ==== Proteomics Parameters ====
 p_total: 0.55
