@@ -185,8 +185,8 @@ def run_kapp_pipeline(
         fluxomics_df = filtered_fluxomics_df.copy()
         
         # Save outputs
-        filtered_fluxomics_df.to_csv(output_dir / f"fluxomics_filtered_{run_name}.csv", index=False)
-        violations_df.to_csv(output_dir / f"FVA_violations_{run_name}.csv", index=False)
+        filtered_fluxomics_df.to_csv(output_dir / f"{config.flux_method}_fluxomics.csv", index=False)
+        violations_df.to_csv(output_dir / f"FVA_violations.csv", index=False)
         
         logger.info(f"FVA integration complete")
         logger.info(f"Violations detected: {violations_df.shape[0]} rows")
@@ -268,7 +268,7 @@ def run_kapp_pipeline(
     # ==== STEP 12: Save results ====
     logger.info("=" * 50)
     logger.info("STEP 12: Save results")
-    output_file = output_dir / f"kmax_{run_name}.csv"
+    output_file = output_dir / f"kmax.csv"
     kmax_dfs_eta_var.to_csv(output_file, index=False)
     logger.success(f"Results saved to: {output_file}")
     
@@ -320,15 +320,12 @@ Output:
         logger.error(f"Error loading configuration: {e}")
         sys.exit(1)
     
-    # Generate run name and setup directories
-    current_date = datetime.now().strftime("%Y%m%d")
-    random_id = random.randint(1000, 9999)
-    folder_name = f"{config.organism}_{config.folder_id}"
-    run_name = f"{config.organism}_{current_date}_{random_id}"
+    # Set folder name
+    run_name = f"{config.organism}_{config.folder_id}"
     
     # Create output directories
     results_base = PROJ_ROOT / "results" / "run_kapp_pipeline"
-    run_root = results_base / folder_name
+    run_root = results_base / run_name
     output_dir = ensure_dir_exists(run_root / "results")
     data_dir = ensure_dir_exists(run_root / "data")
     

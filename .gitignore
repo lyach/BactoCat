@@ -26,7 +26,7 @@ MANIFEST
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
 
-# Environment variables
+# Environment
 .env
 .venv
 env/
@@ -35,16 +35,6 @@ ENV/
 env.bak/
 venv.bak/
 .venv310/
-
-# IDE specific files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS specific files
-.DS_Store
-Thumbs.db 
 
 # Folders
 misc/*
