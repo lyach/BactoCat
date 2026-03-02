@@ -146,7 +146,7 @@ class PipelineConfig(BaseModel):
     )
     folder_id: str = Field(
         default="run",
-        description="ID for output directory organization (e.g., organism_folder_id)"
+        description="ID for output directory organization"
     )
     model_path: Path = Field(
         description="Path to the SBML model file (.xml)"

@@ -185,7 +185,7 @@ def run_kapp_pipeline(
         fluxomics_df = filtered_fluxomics_df.copy()
         
         # Save outputs
-        filtered_fluxomics_df.to_csv(output_dir / f"{config.flux_method}_fluxomics.csv", index=False)
+        filtered_fluxomics_df.to_parquet(output_dir / f"{config.flux_method}_fluxomics.parquet", index=False)
         violations_df.to_csv(output_dir / f"FVA_violations.csv", index=False)
         
         logger.info(f"FVA integration complete")
