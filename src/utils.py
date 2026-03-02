@@ -58,7 +58,7 @@ def get_constrained_growth(model: cobra.Model,
         }
 
         with model:
-            modify_reaction_bounds(model, medium_dict, medium_upper_bound=False, verbose=True)
+            modify_reaction_bounds(model, medium_dict, medium_upper_bound=False, verbose=False)
 
             if method == "FBA":
                 solution = model.optimize()

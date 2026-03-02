@@ -222,6 +222,17 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
         'EX_h2o_e',
         'EX_h_e',
         'EX_co2_e',
+        # for Aida feasibility
+        'EX_o2_e',
+        'EX_mg2_e',
+        'EX_nh4_e',
+        'EX_so4_e',
+        'EX_mn2_e',
+        'EX_cobalt2_e',
+        'EX_fe3_e',
+        'EX_zn2_e',
+        'EX_ca2_e',
+        'EX_fe2_e',
     }
     DEFAULT_FREE_BOUND = 1000.0
     
