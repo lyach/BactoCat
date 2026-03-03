@@ -6,6 +6,7 @@ organism: "ecoli"
 model_path: "data/raw/gems/iml1515.xml"
 solver: "cplex"
 flux_method: "pFBA"
+calculate_eta: false
 
 # ==== Flux Simulation Parameters ====
 carbon_uptake: [2, 6, 10]
@@ -25,6 +26,9 @@ paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
 # ==== Input Data Files  ====
 substrate_df: "data/processed/substrates/iml1515_substrates.csv"
 sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"
+
+# ==== Folder ID for output directory====
+folder_id: "ecoli_homomeric"
 
 # ==== Filtering Thresholds ====
 upper_threshold: 1.0e6   # Upper limit for kcat_app (s⁻¹)

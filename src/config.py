@@ -215,6 +215,10 @@ class PipelineConfig(BaseModel):
         default=1.0e-5,
         description="Lower kcat threshold (s⁻¹)"
     )
+    calculate_eta: bool = Field(
+        default=True,
+        description="Whether to compute eta (kapp/kmax) and variance metrics across conditions"
+    )
     
     @field_validator('model_path', 'paxdb_path', 'substrate_df', 'sequence_df', 'medium_df', mode='before')
     @classmethod
@@ -298,6 +302,7 @@ class PipelineConfig(BaseModel):
             sequence_df=resolve(self.sequence_df),
             upper_threshold=self.upper_threshold,
             lower_threshold=self.lower_threshold,
+            calculate_eta=self.calculate_eta,
         )
 
 

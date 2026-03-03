@@ -254,29 +254,29 @@ def run_kapp_pipeline(
     # ==== STEP 10: Get kmax for homomeric enzymes ====
     logger.info("=" * 50)
     logger.info("STEP 10: Get kmax for homomeric enzymes")
-    kmax_dfs = get_kmax_homomeric(kapp_dfs_filtered)
+    kmax_df = get_kmax_homomeric(kapp_dfs_filtered)
     
     # ==== STEP 11: Calculate eta values ====
     if config.calculate_eta:
         logger.info("=" * 50)
         logger.info("STEP 11: Calculate eta values")
-        kapp_dfs_eta, kmax_dfs_eta_var = get_eta(kapp_dfs_filtered, kmax_dfs)
+        kapp_dfs_eta, kmax_df_out = get_eta(kapp_dfs_filtered, kmax_df)
     else:
         kapp_dfs_eta = kapp_dfs_filtered
-        kmax_dfs_eta_var = kmax_dfs
+        kmax_df_out = kmax_df
     
     # ==== STEP 12: Save results ====
     logger.info("=" * 50)
     logger.info("STEP 12: Save results")
     output_file = output_dir / f"kmax.csv"
-    kmax_dfs_eta_var.to_csv(output_file, index=False)
+    kmax_df_out.to_csv(output_file, index=False)
     logger.success(f"Results saved to: {output_file}")
     
     logger.info("=" * 60)
     logger.success("Pipeline completed!")
     logger.info("=" * 60)
     
-    return kapp_dfs_eta, kmax_dfs_eta_var
+    return kmax_df_out
 
 
 def main():
@@ -374,7 +374,7 @@ Output:
     
     # Run the pipeline
     try:
-        kapp_results, kmax_results = run_kapp_pipeline(
+        kmax_result = run_kapp_pipeline(
             config=config,
             output_dir=output_dir,
             data_dir=data_dir,
