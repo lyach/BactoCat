@@ -160,38 +160,37 @@ def run_kapp_pipeline(
     
     # ==== STEP 3: Run flux variability analysis ====
     logger.info("=" * 50)
-    logger.info("STEP 3: Run flux variability analysis")
+    if config.skip_fva:
+        logger.info("STEP 3: Skipping flux variability analysis (skip_fva=true)")
+        filtered_fluxomics_df = fluxomics_df.copy()
+    else:
+        logger.info("STEP 3: Run flux variability analysis")
+        try:
+            fva_df = create_FVA_dataframe(
+                GEM_path=str(config.model_path),
+                carbon_uptake=config.carbon_uptake,
+                oxygen_uptake=config.oxygen_uptake,
+                mu_fraction=config.mu_fraction,
+                solver=config.solver,
+                carbon_exchange_rxn=config.carbon_exchange_rxn,
+                oxygen_exchange_rxn=config.oxygen_exchange_rxn,
+                medium_df=medium_df_loaded,
+            )
+            logger.info("FVA dataframe created successfully")
+            
+            logger.info("Integrating FVA results with fluxomics data")
+            filtered_fluxomics_df, violations_df = FVA_integration(fluxomics_df, fva_df, filter=True)
+            fva_df.to_csv(output_dir / f"FVA_bounds_{run_name}.csv", index=False)
+            filtered_fluxomics_df.to_csv(output_dir / f"fluxomics_filtered_{run_name}.csv", index=False)
+            violations_df.to_csv(output_dir / f"FVA_violations_{run_name}.csv", index=False)
+            
+            logger.info(f"FVA integration complete. Filtered fluxomics: {filtered_fluxomics_df.shape[0]} rows")
+            logger.info(f"Violations detected: {violations_df.shape[0]} rows")
+        except Exception as e:
+            raise RuntimeError(f"Error during FVA integration: {e}")
     
-    try:
-        fva_df = create_FVA_dataframe(
-            GEM_path=str(config.model_path),
-            carbon_uptake=config.carbon_uptake,
-            oxygen_uptake=config.oxygen_uptake,
-            mu_fraction=config.mu_fraction,
-            solver=config.solver,
-            carbon_exchange_rxn=config.carbon_exchange_rxn,
-            oxygen_exchange_rxn=config.oxygen_exchange_rxn,
-            medium_df=medium_df_loaded,
-        )
-        logger.info("FVA dataframe created successfully")
-    except Exception as e:
-        raise RuntimeError(f"Error creating FVA dataframe: {e}")
-    
-    logger.info("Integrating FVA results with fluxomics data")
-    try:
-        filtered_fluxomics_df, violations_df = FVA_integration(fluxomics_df, fva_df, filter=True)
-        fluxomics_df = filtered_fluxomics_df.copy()
+    fluxomics_df = filtered_fluxomics_df.copy()
         
-        # Save outputs
-        fva_df.to_csv(output_dir / f"FVA_bounds_{run_name}.csv", index=False)
-        filtered_fluxomics_df.to_csv(output_dir / f"fluxomics_filtered_{run_name}.csv", index=False)
-        violations_df.to_csv(output_dir / f"FVA_violations_{run_name}.csv", index=False)
-        
-        logger.info(f"FVA integration complete. Filtered fluxomics: {filtered_fluxomics_df.shape[0]} rows")
-        logger.info(f"Violations detected: {violations_df.shape[0]} rows")
-    except Exception as e:
-        raise RuntimeError(f"Error during FVA integration: {e}")
-    
     # ==== STEP 4: Load sequence information ====
     logger.info("=" * 50)
     logger.info("STEP 4: Load sequence information")
@@ -230,7 +229,7 @@ def run_kapp_pipeline(
     logger.info("=" * 50)
     logger.info("STEP 6: Create enzyme information dataframe")
     enzymes_info_dfs = create_enzyme_info_dataframe(
-        df_enzymes, fluxomics_df, substrate_df_loaded, sequence_df_loaded
+        df_enzymes, fluxomics_df, substrate_df_loaded, sequence_df_loaded, skip_fva=config.skip_fva
     )
     
     # ==== STEP 7: Map proteomics information ====

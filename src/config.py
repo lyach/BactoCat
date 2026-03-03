@@ -183,6 +183,10 @@ class PipelineConfig(BaseModel):
         default=None,
         description="Path to medium conditions CSV"
     )
+    skip_fva: bool = Field(
+        default=False,
+        description="Skip flux variability analysis step"
+    )
     
     # Proteomics
     p_total: float = Field(
@@ -287,6 +291,7 @@ class PipelineConfig(BaseModel):
             oxygen_exchange_rxn=self.oxygen_exchange_rxn,
             mu_fraction=self.mu_fraction,
             medium_df=resolve(self.medium_df),
+            skip_fva=self.skip_fva,
             p_total=self.p_total,
             paxdb_path=resolve(self.paxdb_path),
             substrate_df=resolve(self.substrate_df),

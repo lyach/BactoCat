@@ -6,6 +6,7 @@ organism: "ecoli"
 model_path: "data/raw/gems/iml1515.xml"
 solver: "cplex"
 flux_method: "pFBA"
+skip_fva: false
 
 # ==== Flux Simulation Parameters ====
 carbon_uptake: [2, 6, 10]
