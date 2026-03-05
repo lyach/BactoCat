@@ -533,7 +533,14 @@ def plot_eta_by_subsystem(df: pd.DataFrame, eta_col: str='eta',
 
     # Boxplot
     plt.figure(figsize=figsize)
-    sns.boxplot(x=eta, y='subsystem', data=df, palette=colors)
+    sns.boxplot(
+        x=eta,
+        y='subsystem',
+        hue='subsystem',
+        data=df,
+        palette=colors,
+        legend=False,
+    )
     plt.xlabel('η', fontweight='bold')
     plt.ylabel('')
     plt.show()

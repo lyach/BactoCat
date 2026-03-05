@@ -1,10 +1,8 @@
-# Configuration for In Vitro Eta Analysis
-# Target: Comparing ecoli kmax against EnzyExtract dataset
+# Configuration for Eta (kmax/kcat in vitro) analysis
 
 # ==== Input Paths ====
-# Kmax output from kapp pipeline run
-# kmax_path: "results/run_kapp_pipeline/ecoli_20251219_9330/results/kmax_ecoli_20251219_9330.csv"
-kmax_path: "/home/yuxiz/BactoCat/results/run_kapp_pipeline/ecoli_ecoli_homomeric/results/kmax.csv"
+# Kmax output csv file
+kmax_path: "results/run_kapp_pipeline/ecoli_aidaying_filtered/results/kmax.csv"
 
 # Raw external in vitro kcat dataset
 in_vitro_kcat_path: "data/raw/kcat_datasets/enzyextract_kcat.parquet"
