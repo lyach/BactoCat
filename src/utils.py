@@ -8,7 +8,9 @@ Utility functions for the BactoCat pipeline.
 import pandas as pd
 import warnings
 import cobra
+import os
 
+from loguru import logger
 from cobra import flux_analysis
 from rdkit import Chem
 
@@ -295,7 +297,92 @@ def _is_likely_substrate(smiles: str) -> bool:
     # For now, if it passes the above filters, consider it a substrate
     return True
 
+# =============================================================================
+# ETA analysis
+# =============================================================================
 
+
+def preprocess_in_vitro_dataset(path: str, dataset_name: str) -> pd.DataFrame:
+    """Standardizes columns, types, and string formatting."""
+    df = pd.read_parquet(path)
+
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+    )
+      
+    if dataset_name.upper() == "ENZYEXTRACT":
+        # Adjust these keys based on your specific parquet's headers
+        rename_map = {
+            'sequence': 'sequence', 
+            'smiles': 'SMILES',
+            'kcat_value': 'kcat_in_vitro'
+        }
+        df = df.rename(columns=rename_map)
+
+        # Drop rows where essential merge keys are actually missing (NaN)
+        df = df.dropna(subset=['sequence', 'SMILES', 'kcat_in_vitro'])
+        
+        return df[['sequence', 'SMILES', 'kcat_in_vitro']]
+    
+    return df
+
+def get_eta_in_vitro(in_vitro_kcat_path: str, kmax_results: pd.DataFrame, kmax_path: str, dataset_name: str):
+    """
+    Calculate eta (k_in_vitro / kmax) for a specific dataset.
+    Based on the original get_eta but modified for single-source in vitro comparison.
+
+    Paremeters:
+        in_vitro_kcat_path: Path to the in vitro kcat dataset (parquet)
+        kmax_results: DataFrame containing kmax results with 'sequence', 'SMILES',
+                        'kcat_app_max', and 'subsystem' columns 
+        kmax_path: Path to the original kmax results (used for saving output in same directory)
+        dataset_name: Name of the in vitro dataset (used for logging and output file naming)
+   
+     Returns:
+        pd.DataFrame: DataFrame containing the calculated eta values and related information.
+    """
+    logger.info(f"Calculating eta using {dataset_name} data...")
+
+    # 1. Preprocess the external dataset
+    in_vitro_df = preprocess_in_vitro_dataset(in_vitro_kcat_path, dataset_name)
+
+    # Re-drop any that failed canonicalization
+    kmax_results = kmax_results.dropna(subset=['SMILES'])
+    in_vitro_df = in_vitro_df.dropna(subset=['SMILES'])
+
+    kmax_results['SMILES'] = kmax_results['SMILES'].apply(canonicalize)
+    in_vitro_df['SMILES'] = in_vitro_df['SMILES'].apply(canonicalize)
+
+    # 2. Merge with kmax_results
+    # We keep 'subsystem' from kmax_results as requested
+    merged_df = pd.merge(
+        kmax_results[['sequence', 'SMILES', 'kcat_app_max', 'subsystem']],
+        in_vitro_df,
+        on=['sequence', 'SMILES'],
+        how='inner' 
+    )
+
+    logger.info(f"Number of matches between kmax and {dataset_name}: {len(merged_df)}")
+
+    # 3. Calculate eta = kcat_in_vitro / kcat_app_max
+    # Use the same logic as the original: handle inf/nan
+    merged_df['eta'] = merged_df['kcat_in_vitro'] / merged_df['kcat_app_max']
+    merged_df['eta'] = merged_df['eta'].replace([float('inf'), float('-inf')], float('nan'))
+
+    # 4. Save to CSV in the same folder as kmax_path
+    output_dir = os.path.dirname(kmax_path)
+    output_file = os.path.join(output_dir, f'eta_{dataset_name}.csv')
+
+    # Final column ordering
+    final_cols = ['sequence', 'SMILES', 'kcat_app_max', 'kcat_in_vitro', 'subsystem', 'eta']
+    output_df = merged_df[final_cols]
+        
+    output_df.to_csv(output_file, index=False)
+    logger.info(f"Analysis saved to: {output_file}")
+
+    return output_df
 
 # =============================================================================
 # Others
