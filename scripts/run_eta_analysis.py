@@ -12,8 +12,8 @@ import argparse
 from pathlib import Path
 import pandas as pd
 import yaml
-from config import EtaInVitroConfig, PROJ_ROOT
-from utils import get_eta_in_vitro
+from src.config import EtaInVitroConfig, PROJ_ROOT
+from src.utils import get_eta_in_vitro
 
 def main():
     parser = argparse.ArgumentParser(description="Run Eta In Vitro Analysis")

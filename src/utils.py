@@ -351,12 +351,10 @@ def get_eta_in_vitro(in_vitro_kcat_path: str, kmax_results: pd.DataFrame, kmax_p
     # Re-drop any that failed canonicalization
     kmax_results = kmax_results.dropna(subset=['SMILES'])
     in_vitro_df = in_vitro_df.dropna(subset=['SMILES'])
-
     kmax_results['SMILES'] = kmax_results['SMILES'].apply(canonicalize)
     in_vitro_df['SMILES'] = in_vitro_df['SMILES'].apply(canonicalize)
 
     # 2. Merge with kmax_results
-    # We keep 'subsystem' from kmax_results as requested
     merged_df = pd.merge(
         kmax_results[['sequence', 'SMILES', 'kcat_app_max', 'subsystem']],
         in_vitro_df,
@@ -366,9 +364,8 @@ def get_eta_in_vitro(in_vitro_kcat_path: str, kmax_results: pd.DataFrame, kmax_p
 
     logger.info(f"Number of matches between kmax and {dataset_name}: {len(merged_df)}")
 
-    # 3. Calculate eta = kcat_in_vitro / kcat_app_max
-    # Use the same logic as the original: handle inf/nan
-    merged_df['eta'] = merged_df['kcat_in_vitro'] / merged_df['kcat_app_max']
+    # 3. Calculate eta = kcat_app_max / kcat_in_vitro
+    merged_df['eta'] = merged_df['kcat_app_max'] / merged_df['kcat_in_vitro']
     merged_df['eta'] = merged_df['eta'].replace([float('inf'), float('-inf')], float('nan'))
 
     # 4. Save to CSV in the same folder as kmax_path
