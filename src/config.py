@@ -310,6 +310,26 @@ class PipelineConfig(BaseModel):
             calculate_eta=self.calculate_eta,
         )
 
+class EtaInVitroConfig(BaseModel):
+    """Configuration for In Vitro kcat comparison (Eta analysis)."""
+    
+    kmax_path: Path = Field(
+        description="Path to the kmax results CSV from run_kapp_pipeline"
+    )
+    in_vitro_kcat_path: Path = Field(
+        description="Path to the external kcat dataset (e.g. .parquet)"
+    )
+    dataset_name: str = Field(
+        default="EnzyExtract",
+        description="Name of the dataset for filename and preprocessing logic"
+    )
+
+    @field_validator('kmax_path', 'in_vitro_kcat_path', mode='before')
+    @classmethod
+    def convert_to_path(cls, v):
+        if isinstance(v, str):
+            return Path(v)
+        return v
 
 # =============================================================================
 # CONFIGURATION LOADING
