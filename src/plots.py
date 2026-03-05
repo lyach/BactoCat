@@ -420,7 +420,7 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
     ax.legend(frameon=True)
 
 # =============================================================================
-# eta plotting functions
+# eta (kmax/kcat in vitro) plotting functions
 # =============================================================================
 
 def plot_eta(df: pd.DataFrame, eta_col: str, 
@@ -503,6 +503,44 @@ def plot_eta(df: pd.DataFrame, eta_col: str,
     plt.show()
     
     return
+
+
+def plot_eta_by_subsystem(df: pd.DataFrame, eta_col: str='eta', 
+                           log_transform: bool = False,
+                           figsize=(8, 6)):
+    """
+    Boxplot of eta values by subsystem.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing eta values
+    eta_col : str
+        Column name containing eta values
+    log_transform : bool, default False
+        Whether to log transform the eta values
+    """
+    if log_transform == True:
+        eta = np.log10(df[eta_col])
+    else:
+        eta = df[eta_col]
+    
+    # Subsystems
+    subsystems = df['subsystem'].unique()
+    
+    # Color palette
+    colors = sns.color_palette(palette='PRGn', n_colors=len(subsystems))
+
+    # Boxplot
+    plt.figure(figsize=figsize)
+    sns.boxplot(x=eta, y='subsystem', data=df, palette=colors)
+    plt.xlabel('η', fontweight='bold')
+    plt.ylabel('')
+    plt.show()
+
+# =============================================================================
+# eta (kapp/kmax) plotting functions
+# =============================================================================
 
 
 def plot_eta_variability(df: pd.DataFrame, figsize: Tuple[int, int] = (12, 3)):
