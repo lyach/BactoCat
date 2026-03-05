@@ -187,7 +187,11 @@ class PipelineConfig(BaseModel):
         default=None,
         description="Path to medium conditions CSV"
     )
-    
+    run_fva: bool = Field(
+        default=True,
+        description="Run flux variability analysis step"
+    )
+
     # Proteomics
     p_total: float = Field(
         description="Total protein fraction (g protein / g DCW)"
@@ -296,6 +300,7 @@ class PipelineConfig(BaseModel):
             oxygen_exchange_rxn=self.oxygen_exchange_rxn,
             mu_fraction=self.mu_fraction,
             medium_df=resolve(self.medium_df),
+            run_fva=self.run_fva,
             p_total=self.p_total,
             paxdb_path=resolve(self.paxdb_path),
             substrate_df=resolve(self.substrate_df),

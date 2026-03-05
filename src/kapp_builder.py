@@ -535,7 +535,7 @@ def load_dataframe_if_path(data_input):
         raise ValueError("Input must be either a file path (str) or a pandas DataFrame")
 
 
-def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequence_df):
+def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequence_df, run_fva: bool = True):
     """
     Create enzyme info dataframes for each flux condition by merging enzyme, flux, substrate, and sequence data.
     
@@ -548,6 +548,8 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
             Substrates dataframe or path to CSV file
         sequence_df: str or pd.DataFrame
             Sequence dataframe or path to CSV file
+        run_fva: bool
+            If True, run flux variability analysis (default: True)
     
     Returns:
         enzyme_info_dfs: dict
@@ -583,7 +585,8 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         # == Fluxomics info ==
         # Merge with specific flux condition
         if lower_col not in fluxomics_df.columns or upper_col not in fluxomics_df.columns:
-            logger.warning(f"Warning: Missing FVA columns for {flux_col} — skipping FVA merge.")
+            if run_fva:
+                logger.warning(f"Warning: Missing FVA columns for {flux_col} — skipping FVA merge.")
             flux_subset = fluxomics_df[['rxn_id', flux_col]].copy()
             flux_subset.rename(columns={flux_col: 'flux_value'}, inplace=True)
         else:
