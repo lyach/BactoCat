@@ -2,7 +2,7 @@
 Module Description: plots.py
 
 Purpose: 
-Utility functions for kcat visualization.
+Utility functions for visualizations
 """
 
 import pandas as pd
@@ -16,9 +16,75 @@ from rdkit import Chem
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
-# ============================================
-# Plots for comparing kcat distributions
-# ============================================
+
+# =============================================================================
+# kmax plotting functions
+# =============================================================================
+
+def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str, 
+                           log_transform: bool = False,
+                           hue_col: str = 'subsystem',
+                           title="$k_{cat}$ correlation",
+                           xlabel="log₁₀($k_{cat}$ $in$ $vitro$) [s⁻¹]",
+                           ylabel="log₁₀($k_{cat}$ $in$ $vivo$) [s⁻¹]",
+                           figsize=(16, 7)):
+    """
+    Scatter plot to compare kcat in vitro vs kcat in vivo with regression 
+    line and correlation coefficient, colored by a categorical column.
+    
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing kcat values
+    x_col : str
+        Column name containing x values (kcat in vitro)
+    y_col : str
+        Column name containing y values (kcat in vivo)
+    hue_col : str
+        Column name containing the categories to color by (e.g., 'subsystem')
+        
+    Returns
+    -------
+    None
+        Function displays scatter plot with regression line and correlation coefficient
+    """
+    if log_transform == True:
+        x = np.log10(df[x_col])
+        y = np.log10(df[y_col])
+    else:
+        x = df[x_col]
+        y = df[y_col]
+
+    # Calculate regression and correlation
+    slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+    r_squared = r_value ** 2
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Plot datapoints colored by subsystem 
+    sns.scatterplot(data=df, x=x, y=y, hue=hue_col, palette='Set2', 
+                    alpha=0.7, edgecolor='k', ax=ax, s=100)
+
+    # Plot regression line
+    x_line = np.linspace(x.min(), x.max(), 100)
+    ax.plot(x_line, slope * x_line + intercept, color='red', linestyle='--',
+            label=f'y = {slope:.2f}x + {intercept:.2f} (R² = {r_squared:.2f})')
+
+    bound = [min(x.min(), y.min()), max(x.max(), y.max())]
+    ax.plot(bound, bound, color='gray', linestyle=':')
+
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_xlabel(xlabel, fontsize=14)
+    ax.set_ylabel(ylabel, fontsize=14)
+    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.grid(True, linestyle='--', alpha=0.5)
+    
+    ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+
+    plt.tight_layout()
+    plt.show()
+
+    return
 
 def compare_kcat_distribution(df1: pd.DataFrame, kcat_col1: str, 
                             df2: pd.DataFrame, kcat_col2: str,
@@ -73,17 +139,20 @@ def compare_kcat_distribution(df1: pd.DataFrame, kcat_col1: str,
     # Print summary statistics
     _print_summary_statistics(kcat1_raw, log_kcat1, kcat2_raw, log_kcat2, label1, label2)
     
+    # Color palette
+    colors = sns.color_palette(palette='PRGn', n_colors=2)
+    
     # Create visualization
     fig, axes = plt.subplots(1, 2, figsize=figsize)
     
     # Plot 1: Log-histogram + KDE overlay
-    _plot_histogram_kde(log_kcat1, log_kcat2, axes[0], label1, label2)
+    _plot_histogram_kde(log_kcat1, log_kcat2, axes[0], label1, label2, colors=colors)
     
     # Plot 2: ECDF overlay
     #_plot_ecdf(log_kcat1, log_kcat2, axes[1], label1, label2)
     
     # Plot 3: Q-Q plot
-    _plot_qq(log_kcat1, log_kcat2, axes[1], label1, label2)
+    _plot_qq(log_kcat1, log_kcat2, axes[1], label1, label2, colors=colors)
     
     plt.tight_layout()
     plt.show()
@@ -173,7 +242,8 @@ def _print_summary_statistics(kcat1_raw: pd.Series, log_kcat1: pd.Series,
 
 
 def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series = None, ax: plt.Axes = None,
-                       label1: str = "Dataset", label2: str = "Dataset 2") -> None:
+                       label1: str = "Dataset", label2: str = "Dataset 2",
+                       colors: list = None) -> None:
     """
     Plot log-histogram with KDE overlay for one or two datasets.
     
@@ -198,6 +268,13 @@ def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series = None, ax: p
     # Determine if plotting one or two datasets
     dual_mode = log_kcat2 is not None
     
+    # Color palette
+    if colors is None:
+        colors = sns.color_palette(palette='PRGn', n_colors=2)
+    kde_colors = [
+        tuple(np.clip(np.array(c) * 0.7, 0, 1)) for c in colors
+    ]
+    
     # Number of bins
     if dual_mode:
         n_bins = max(20, min(50, int(np.sqrt(len(log_kcat1) + len(log_kcat2)))))
@@ -207,12 +284,12 @@ def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series = None, ax: p
     # Plot histogram(s)
     if dual_mode:
         ax.hist(log_kcat1, bins=n_bins, alpha=0.6, density=True, 
-                label=f'{label1} (n={len(log_kcat1):,})', color='skyblue', edgecolor='black', linewidth=0.5)
+                label=f'{label1} (n={len(log_kcat1):,})', color=colors[0], edgecolor='black', linewidth=0.5)
         ax.hist(log_kcat2, bins=n_bins, alpha=0.6, density=True,
-                label=f'{label2} (n={len(log_kcat2):,})', color='lightcoral', edgecolor='black', linewidth=0.5)
+                label=f'{label2} (n={len(log_kcat2):,})', color=colors[1], edgecolor='black', linewidth=0.5)
     else:
         ax.hist(log_kcat1, bins=n_bins, alpha=0.7, density=True, 
-                label=f'{label1} (n={len(log_kcat1):,})', color='skyblue', edgecolor='black', linewidth=0.5)
+                label=f'{label1} (n={len(log_kcat1):,})', color=colors[0], edgecolor='black', linewidth=0.5)
     
     # Add KDE overlay
     try:
@@ -226,24 +303,25 @@ def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series = None, ax: p
             x_max = max(x_max, log_kcat2.max())
             
             x_range = np.linspace(x_min, x_max, 200)
-            ax.plot(x_range, kde1(x_range), color='blue', linewidth=2, linestyle='--')
-            ax.plot(x_range, kde2(x_range), color='red', linewidth=2, linestyle='--')
+            ax.plot(x_range, kde1(x_range), color=kde_colors[0], linewidth=2, linestyle='--')
+            ax.plot(x_range, kde2(x_range), color=kde_colors[1], linewidth=2, linestyle='--')
         else:
             x_range = np.linspace(x_min, x_max, 200)
-            ax.plot(x_range, kde1(x_range), color='blue', linewidth=2, linestyle='--')
+            ax.plot(x_range, kde1(x_range), color=kde_colors[0], linewidth=2, linestyle='--')
         
     except Exception as e:
         print(f"Warning: Could not generate KDE overlay: {e}")
     
-    ax.set_xlabel('log₁₀(kcat) [s⁻¹]', fontweight="bold")
-    ax.set_ylabel('Density', fontweight="bold")
+    ax.set_xlabel('log₁₀(kcat) [s⁻¹]', fontsize=12)
+    ax.set_ylabel('Density', fontsize=12)
+    ax.tick_params(axis='both', which='major', labelsize=12)
     
     if dual_mode:
         ax.set_title('Distribution Comparison\n(Histogram + KDE)')
     else:
         ax.set_title('kcat Distribution\n(Histogram + KDE)')
     
-    ax.legend()
+    ax.legend(fontsize=12)
     ax.grid(True, alpha=0.3)
     
     if ax is None:
@@ -281,7 +359,7 @@ def _plot_ecdf(log_kcat1: pd.Series, log_kcat2: pd.Series, ax: plt.Axes,
 def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
              label_x: str, label_y: str,
              qmin: float = 0.02, qmax: float = 0.98, n_q: int = 49,
-             random_state: int = 0) -> None:
+             random_state: int = 0, colors: list = None) -> None:
     """
     Quantile–Quantile plot on log10(kcat):
       x-axis: label_x (e.g., kcat_invivo)
@@ -304,13 +382,17 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
     qx = np.quantile(x, p)
     qy = np.quantile(y, p)
 
+    # Default colors if not provided
+    if colors is None:
+        colors = sns.color_palette(palette='PRGn', n_colors=2)
+
     # scatter of Q–Q points
-    ax.scatter(qx, qy, alpha=0.65, s=22, label="Quantile pairs", color="purple")
+    ax.scatter(qx, qy, alpha=0.65, s=22, label="Quantile pairs", color=colors[0])
 
     # y = x reference line
     lo = float(min(qx.min(), qy.min()))
     hi = float(max(qx.max(), qy.max()))
-    ax.plot([lo, hi], [lo, hi], "r--", lw=2, label="y = x")
+    ax.plot([lo, hi], [lo, hi], color="gray", linestyle="--", lw=2, label="y = x")
 
     # ordinary least squares fit
     a = b = np.nan
@@ -318,7 +400,7 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
 
     # plot the fitted line across the Q–Q domain
     xs = np.array([lo, hi])
-    ax.plot(xs, a + b * xs, lw=2.0, color="black",
+    ax.plot(xs, a + b * xs, lw=2.0, color=colors[1],
             label=("y = a + b x"))
 
     # annotate interpretable stats
@@ -336,7 +418,92 @@ def _plot_qq(log_kcat_x, log_kcat_y, ax: plt.Axes,
     ax.set_title("Quantile–Quantile Plot (log₁₀ scale)")
     ax.grid(True, alpha=0.3)
     ax.legend(frameon=True)
+
+# =============================================================================
+# eta plotting functions
+# =============================================================================
+
+def plot_eta(df: pd.DataFrame, eta_col: str, 
+                           log_transform: bool = False,
+                           title="η: $k_{max}$ / $k_{cat}$ in vivo",
+                           figsize=(8, 6)):
+    """
+    Histogram plot of eta values.
     
+    Parameters
+    ----------
+    df : pd.DataFrame
+        DataFrame containing eta values
+    eta_col : str
+        Column name containing eta values
+    log_transform : bool, default False
+        Whether to log transform the eta values
+        
+    Returns
+    -------
+    None
+        Function displays histogram plot of eta values
+    """
+    if log_transform == True:
+        eta = np.log10(df[eta_col])
+    else:
+        eta = df[eta_col]
+
+    # Color palette
+    colors = sns.color_palette(palette='PRGn', n_colors=2)
+    kde_colors = [
+        tuple(np.clip(np.array(c) * 0.7, 0, 1)) for c in colors
+    ]
+
+    # Plot histogram
+    plt.figure(figsize=figsize)
+    plt.hist(
+        eta,
+        bins=30,
+        alpha=0.7,
+        color=colors[0],
+        edgecolor='black',
+        density=True,
+        label=f'n={len(eta):,}',
+    )
+    
+    # Add KDE overlay
+    try:
+        kde = stats.gaussian_kde(eta.dropna())
+        x_range = np.linspace(eta.min(), eta.max(), 200)
+        plt.plot(x_range, kde(x_range), color=kde_colors[0], linewidth=2)
+    except Exception:
+        pass
+    
+    # Add vertical lines at mean and median
+    plt.axvline(
+        eta.mean(),
+        color=colors[1],
+        linestyle='--',
+        linewidth=2,
+        label=f'Mean={eta.mean():.3f}',
+    )
+    plt.axvline(
+        eta.median(),
+        color=kde_colors[1],
+        linestyle='--',
+        linewidth=2,
+        label=f'Median={eta.median():.3f}',
+    )
+    
+    if log_transform == True:
+        plt.xlabel('log₁₀(η)', fontweight='bold')
+    else:
+        plt.xlabel('η', fontweight='bold')
+        
+    plt.ylabel('Density', fontweight='bold')
+    
+    plt.title(title)
+    plt.legend()
+    plt.show()
+    
+    return
+
 
 def plot_eta_variability(df: pd.DataFrame, figsize: Tuple[int, int] = (12, 3)):
     """

@@ -6,10 +6,10 @@ organism: "ecoli"
 model_path: "data/raw/gems/iml1515.xml"
 solver: "cplex"
 flux_method: "FBA"
-calculate_eta: false
+calculate_eta: true
 
 # ==== Flux Simulation Parameters ====
-medium_df: "data/processed/amns/faure_amn_medium_small.csv"
+medium_df: "data/processed/amns/faure_amn_medium.csv"
 
 # ==== Proteomics Parameters ====
 p_total: 0.55
@@ -20,7 +20,7 @@ substrate_df: "data/processed/substrates/iml1515_substrates.csv"
 sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"
 
 # ==== Folder ID for output directory====
-folder_id: "faure_small"
+folder_id: "faure"
 
 # ==== Filtering Thresholds ====
 upper_threshold: 1.0e6   # Upper limit for kcat_app (s⁻¹)

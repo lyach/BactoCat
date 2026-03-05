@@ -7,7 +7,7 @@ model_path: "data/raw/gems/iml1515.xml"
 solver: "cplex"
 flux_method: "pFBA"
 run_fva: false
-calculate_eta: false
+calculate_eta: true
 
 # ==== Flux Simulation Parameters ====
 carbon_uptake: [2, 6, 10]
