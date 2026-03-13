@@ -1,5 +1,5 @@
 """
-Module Description: paxdb_mapper.py
+paxdb_mapper.py
 
 Purpose: 
 Map PaxDB protein abundances to an enzyme dataframe by gene identifier and calculate protein concentrations.

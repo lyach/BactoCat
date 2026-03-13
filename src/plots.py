@@ -1,8 +1,8 @@
 """
-Module Description: plots.py
+plots.py
 
 Purpose: 
-Utility functions for visualizations
+Utility functions for plotting kapp, kmax, kcat in vivo and eta comparisons.
 """
 
 import pandas as pd
@@ -27,7 +27,7 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
                            title="$k_{cat}$ correlation",
                            xlabel="log₁₀($k_{cat}$ $in$ $vitro$) [s⁻¹]",
                            ylabel="log₁₀($k_{cat}$ $in$ $vivo$) [s⁻¹]",
-                           figsize=(16, 7)):
+                           figsize=(13, 7)):
     """
     Scatter plot to compare kcat in vitro vs kcat in vivo with regression 
     line and correlation coefficient, colored by a categorical column.
@@ -64,19 +64,31 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
     # Plot datapoints colored by subsystem 
     sns.scatterplot(data=df, x=x, y=y, hue=hue_col, palette='Set2', 
                     alpha=0.7, edgecolor='k', ax=ax, s=100)
-
+    
+    # Rename subsystems
+    df['subsystem'] = df['subsystem'].replace({
+        'Purine and Pyrimidine Biosynthesis': 'Nucleotide Biosynthesis',
+        'Glycolysis/Gluconeogenesis': 'Glycolysis',
+        'Alternate Carbon Metabolism': 'Alternate Carbon',
+        'Nucleotide Salvage Pathway': 'Nucleotide Salvage',
+        'Threonine and Lysine Metabolism': 'Thr/Lys Metabolism',
+        'Cofactor and Prosthetic Group Biosynthesis': 'Cofactor Biosynthesis',
+        'Cell Envelope Biosynthesis': 'Cell Envelope',
+        'Tryptophan, Tyrosine, and Phenylalanine Metabolism': 'Aromatic AA Metabolism',
+    })
+    
     # Plot regression line
-    x_line = np.linspace(x.min(), x.max(), 100)
-    ax.plot(x_line, slope * x_line + intercept, color='red', linestyle='--',
-            label=f'y = {slope:.2f}x + {intercept:.2f} (R² = {r_squared:.2f})')
+    # x_line = np.linspace(x.min(), x.max(), 100)
+    # ax.plot(x_line, slope * x_line + intercept, color='red', linestyle='--',
+    #         label=f'y = {slope:.2f}x + {intercept:.2f} (R² = {r_squared:.2f})')
 
     bound = [min(x.min(), y.min()), max(x.max(), y.max())]
     ax.plot(bound, bound, color='gray', linestyle=':')
 
-    ax.set_title(title, fontsize=14, fontweight='bold')
-    ax.set_xlabel(xlabel, fontsize=14)
-    ax.set_ylabel(ylabel, fontsize=14)
-    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.set_title(title, fontsize=15, fontweight='bold')
+    ax.set_xlabel(xlabel, fontsize=15)
+    ax.set_ylabel(ylabel, fontsize=15)
+    ax.tick_params(axis='both', which='major', labelsize=15)
     ax.grid(True, linestyle='--', alpha=0.5)
     
     ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
@@ -312,16 +324,16 @@ def _plot_histogram_kde(log_kcat1: pd.Series, log_kcat2: pd.Series = None, ax: p
     except Exception as e:
         print(f"Warning: Could not generate KDE overlay: {e}")
     
-    ax.set_xlabel('log₁₀(kcat) [s⁻¹]', fontsize=12)
-    ax.set_ylabel('Density', fontsize=12)
-    ax.tick_params(axis='both', which='major', labelsize=12)
+    ax.set_xlabel('log₁₀(kcat) [s⁻¹]', fontsize=11)
+    ax.set_ylabel('Density', fontsize=11)
+    ax.tick_params(axis='both', which='major', labelsize=11)
     
     if dual_mode:
         ax.set_title('Distribution Comparison\n(Histogram + KDE)')
     else:
         ax.set_title('kcat Distribution\n(Histogram + KDE)')
     
-    ax.legend(fontsize=12)
+    ax.legend(fontsize=11)
     ax.grid(True, alpha=0.3)
     
     if ax is None:
@@ -525,10 +537,25 @@ def plot_eta_by_subsystem(df: pd.DataFrame, eta_col: str='eta',
     else:
         eta = df[eta_col]
     
+    # Remove unwanted subsystems
+    to_exclude = [
+        'Cell Envelope Biosynthesis',
+        'Tyrosine, Tryptophan, and Phenylalanine Metabolism',
+    ]
+    df = df[~df['subsystem'].isin(to_exclude)]
+    
+    # Rename subsystems
+    df['subsystem'] = df['subsystem'].replace({
+        'Purine and Pyrimidine Biosynthesis': 'Nucleotide Biosynthesis',
+        'Glycolysis/Gluconeogenesis': 'Glycolysis',
+        'Alternate Carbon Metabolism': 'Alternate Carbon',
+        'Nucleotide Salvage Pathway': 'Nucleotide Salvage',
+        'Threonine and Lysine Metabolism': 'Thr/Lys Metabolism',
+        'Cofactor and Prosthetic Group Biosynthesis': 'Cofactor Biosynthesis',
+    })
+    
     # Subsystems
     subsystems = df['subsystem'].unique()
-    
-    # Color palette
     colors = sns.color_palette(palette='PRGn', n_colors=len(subsystems))
 
     # Boxplot
@@ -541,8 +568,8 @@ def plot_eta_by_subsystem(df: pd.DataFrame, eta_col: str='eta',
         palette=colors,
         legend=False,
     )
-    plt.xlabel('η', fontweight='bold')
-    plt.ylabel('')
+    plt.xlabel('log₁₀(η$_i$)', fontsize=14)
+    plt.tick_params(axis='both', which='major', labelsize=14)
     plt.show()
 
 # =============================================================================

@@ -1,5 +1,12 @@
 """
-The following functions in this file are attributed to kinGEMs: 
+substrate_mapper.py
+
+Purpose: 
+Map substrates to SMILES structures using external databases.
+
+Overview: 
+The following functions in this file are attributed to the kinGEMs
+project (https://github.com/ranaabarghout/kinGEMs/): 
 - load_model  
 - get_substrate_metabolites
 - map_metabolites
@@ -11,13 +18,13 @@ The following functions in this file are attributed to kinGEMs:
 
 import logging
 import os
-import random  # noqa: F401
-import re  # noqa: F401
-import time  # noqa: F401
+import random
+import re
+import time
 import urllib
 import urllib.error
-from urllib.parse import quote  # noqa: F401
-from urllib.request import urlopen  # noqa: F401
+from urllib.parse import quote
+from urllib.request import urlopen
 from tqdm import tqdm
 
 from bioservices import UniProt
@@ -26,7 +33,7 @@ from cobra.core import Reaction
 from cobra.util.solver import set_objective
 import numpy as np
 import pandas as pd
-import pubchempy as pcp  # noqa: F401
+import pubchempy as pcp
 
 from .config import (
     CHEBI_COMPOUNDS,

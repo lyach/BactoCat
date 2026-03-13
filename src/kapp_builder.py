@@ -1,5 +1,5 @@
 """
-Module Description: kapp_builder.py
+kapp_builder.py
 
 Purpose: 
 Script for building the kapp dataframe.
@@ -218,11 +218,11 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
     if medium is None:
         return
     
+    # for pFBA feasibility
     FREE_METABOLITES = {
         'EX_h2o_e',
         'EX_h_e',
         'EX_co2_e',
-        # for Aida feasibility
         'EX_o2_e',
         'EX_mg2_e',
         'EX_nh4_e',
@@ -355,8 +355,6 @@ def create_FVA_dataframe(
             modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=True)
             
             # Optimize
-            # TO DO - is it necessary to do prev optimization for FVA?
-            # COMMENTED OUT FOR NOW
             # solution = model_copy.optimize()
             # if solution.status != 'optimal':
             #     logger.warning(f"Optimization failed at condition {condition_id} with status: {solution.status}, filling with NaNs.")

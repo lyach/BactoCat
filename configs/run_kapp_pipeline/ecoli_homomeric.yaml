@@ -1,5 +1,7 @@
 # Configuration file for kapp pipeline
+
 # Homomeric kmax calculation for E. coli (iML1515)
+# using different combinations of uptake rates
 
 # ==== Model Configuration ====
 organism: "ecoli"
@@ -16,9 +18,6 @@ oxygen_uptake: [15, 17.5, 20]
 # Exchange reaction IDs
 carbon_exchange_rxn: "EX_glc__D_e"
 oxygen_exchange_rxn: "EX_o2_e"
-
-# FVA parameters
-mu_fraction: 0.9
 
 # ==== Proteomics Parameters ====
 p_total: 0.55

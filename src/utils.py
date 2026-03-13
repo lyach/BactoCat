@@ -1,5 +1,5 @@
 """
-Module Description: utils.py
+utils.py
 
 Purpose: 
 Utility functions for the BactoCat pipeline.
@@ -83,8 +83,7 @@ def get_constrained_growth(model: cobra.Model,
 # Functions for Aida dataset preprocessing
 # =============================================================================
 
-def prepare_aida_dataset(df_pred_path: pd.DataFrame, 
-                         df_cond_path: pd.DataFrame) -> pd.DataFrame:
+def prepare_aida_dataset(df_pred_path: pd.DataFrame) -> pd.DataFrame:
     """
     Prepare the Aida dataset to be used in the BactoCat pipeline.
     """
@@ -92,15 +91,7 @@ def prepare_aida_dataset(df_pred_path: pd.DataFrame,
     df_pred = pd.read_csv(df_pred_path)
     print(f"Loaded Aida predictions df with shape {df_pred.shape}")
     
-    df_cond = pd.read_csv(df_cond_path)
-    print(f"Loaded Aida conditions df with shape {df_cond.shape}")
-    
-    # TO DO: Check that the number of conditions in df_cond 
-    # is the same as the number of conditions in df_pred
-    # and populate the condition_id column in df_pred with the Condition ID column from df_cond
-    # which has the og condition number from Aida & Ying
-    
-    # TEMPORARY: Add placeholder id
+    # Add condition id
     df_pred['condition_id'] = [f'cond{i+1}' for i in range(len(df_pred))]
     
     # Rename GR_AVG column to avg_growth

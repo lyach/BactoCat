@@ -1,8 +1,8 @@
 """
-Module Description: gene_sequence_mapper.py
+gene_sequence_mapper.py
 
 Purpose: 
-Recover protein sequences using the gene IDs annotated in genome-scale models.
+Recover protein sequences from UniProt using the gene IDs annotated in genome-scale models.
 
 Overview: 
 This module provides functions to:

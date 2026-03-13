@@ -3,12 +3,14 @@
 
 ## Structure
 
-The pipeline is executed via the `run-kapp-pipeline` command-line tool, which requires a YAML configuration file specifying model parameters, flux simulation conditions, proteomics data, and filtering thresholds. The tool processes genome-scale metabolic models through multiple steps—from GPR analysis and flux simulations to k<sub>app</sub> calculation and filtering—producing curated datasets of apparent turnover numbers.
+- The main BactoCat pipeline is executed through the [`run_kapp_pipeline`](../scripts/run_kapp_pipeline.py) script.
+- It requires a `YAML` configuration file specifying model parameters, flux simulation conditions, proteomics data, and filtering thresholds. 
+- It will processes genome-scale metabolic models through multiple steps, producing curated datasets of apparent turnover numbers (k<sub>app</sub>).
 
 
 ## Configuration File
 
-The pipeline is controlled by a YAML configuration file (saved under `configs/run_kapp_pipeline/`). All paths are relative to the **project root**.
+The pipeline is controlled by a `YAML` configuration file (saved under `configs/run_kapp_pipeline/`). All paths are relative to the **project root**.
 
 ### Model Configuration
 
@@ -17,7 +19,17 @@ The pipeline is controlled by a YAML configuration file (saved under `configs/ru
 - **`solver`**: Optimization solver - `"cplex"`, `"gurobi"`, or `"glpk"`
 - **`flux_method`**: Flux analysis method - `"FBA"` or `"pFBA"`
 
-### Flux Simulation Parameters
+### Flux Simulations
+
+The pipeline can be run with ways of computng flux simulations:
+
+#### a) Using experimental conditions:
+
+- **`medium_df`**: csv file specifying the uptake reactions (columns) across different conditions (rows). Values are in  in mmol/gDW·h 
+
+An example file can be found [here](../configs/run_kapp_pipeline/ecoli_medium_aidaying.yaml).
+
+#### b) Using different combinations of uptake rates:
 
 - **`carbon_uptake`**: Carbon uptake rates in mmol/gDW·h 
 - **`oxygen_uptake`**: Oxygen uptake rates in mmol/gDW·h 
@@ -25,7 +37,7 @@ The pipeline is controlled by a YAML configuration file (saved under `configs/ru
 - **`oxygen_exchange_rxn`**: Oxygen exchange reaction ID
 - **`mu_fraction`**: Growth rate fraction for FVA 
 
-The pipeline tests all combinations of carbon and oxygen rates (e.g., 3 × 3 = 9 conditions).
+The pipeline tests all combinations of carbon and oxygen rates. An example file can be found [here](../configs/run_kapp_pipeline/ecoli_homomeric.yaml).
 
 ### Proteomics Parameters
 
@@ -46,50 +58,27 @@ If not provided, these will be auto-generated.
 - **`upper_threshold`**: Maximum k<sub>app</sub> in s⁻¹ 
 - **`lower_threshold`**: Minimum k<sub>app</sub> in s⁻¹
 
-### Example Configuration
+### Output folder
+- **`folder_id`**: name of the folder to store the run results.
 
-```yaml
-# configs/run_kapp_pipeline/ecoli_homomeric.yaml
-organism: "ecoli"
-model_path: "data/raw/gems/iml1515.xml"
-solver: "cplex"
-flux_method: "pFBA"
-
-carbon_uptake: [2, 6, 10]
-oxygen_uptake: [15, 17.5, 20]
-carbon_exchange_rxn: "EX_glc__D_e"
-oxygen_exchange_rxn: "EX_o2_e"
-mu_fraction: 0.9
-
-p_total: [0.32, 0.435, 0.55]
-paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
-
-upper_threshold: 1.0e6
-lower_threshold: 1.0e-5
-
-sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"
-substrate_df: "data/processed/substrates/iml1515_substrates.csv"
-
-```
 
 ## Output Files
 
-Results are saved to `results/run_kapp_pipeline/{organism}_{date}_{id}/`:
+Results will be saved under `results/run_kapp_pipeline/{folder_id}/`:
 
 ```
-results/run_kapp_pipeline/ecoli_20251215_1634/
-├── data/                                        # Intermediate files (sequences and substrates)
-└── results/                                        # Final outputs
-    ├── kmax_ecoli_20251215_1634.csv                # Main results
-    ├── log_ecoli_20251215_1634.log                 # Detailed execution log
-    ├── FVA_bounds_ecoli_20251215_1634.csv          # FVA min/max bounds
-    ├── fluxomics_filtered_ecoli_20251215_1634.csv  # FVA-filtered fluxes
-    └── FVA_violations_ecoli_20251215_1634.csv      # Fluxes violating FVA
+results/run_kapp_pipeline/folder_id/
+├── data/                                 # Intermediate files (sequences and substrates)
+└── results/                              # Final outputs
+    ├── kmax.csv                          # Main results
+    ├── log_ecoli_{folder_id}.log         # Detailed execution log
+    ├── FBA_fluxomics.parquet             # All fluxomes across conditions
+    └── FVA_violations.csv                # Fluxes violating FVA
 ```
 
 ### Main Results File
 
-`kmax_{organism}_{date}_{id}.csv` contains:
+`kmax.csv` contains:
 - Maximum k<sub>app</sub> values for each enzyme-substrate pair
 - η (saturation) statistics: mean, standard deviation, coefficient of variation
 - Metadata: genes, reactions, subsystems, sequences, SMILES
@@ -101,7 +90,7 @@ The automated pipeline performs the following steps:
 
 1. **Load Model**: Read SBML metabolic model
 2. **Extract GPR Rules**: Classify enzymes (homomeric, complex, isoenzyme)
-3. **Flux Simulations**: Run FBA/pFBA for all condition combinations
+3. **Flux Simulations**: Run FBA/pFBA for all conditions
 4. **Load Sequences**: Import protein sequences from UniProt
 5. **Load Substrates**: Import substrate SMILES information
 6. **Merge Data**: Combine enzyme, flux, substrate, and sequence data
@@ -116,79 +105,13 @@ The automated pipeline performs the following steps:
 
 ## Troubleshooting
 
-### Command Not Found
+### Solvers
 
-If `run-kapp-pipeline` is not recognized:
-1. Ensure you've run `pip install -e .` from the project root
-2. Check that your virtual environment is activated
-3. Use `python -m scripts.run_kapp_pipeline` as an alternative
+The BactoCat framework relies on external solvers to perform optimization tasks. To run certain components like FVA, you must have at least one of the following solvers installed on your system:
+- [IBM CPLEX](https://www.ibm.com/products/ilog-cplex-optimization-studio) (requires license) 
+- [Gurobi](https://www.gurobi.com/lp/all/request-an-evaluation/?utm_source=google&utm_medium=cpc&utm_campaign=M3+DG+Search+NA+Brand&gad_source=1&gad_campaignid=193283256&gbraid=0AAAAADimQ3hP-_zFR-f3IsRZ0E_dQ7VmZ&gclid=CjwKCAiAmKnKBhBrEiwAaqAnZy5G51otRX82XLRp-6SEAtRUtVB540b6DdUNlO04R-mmwWGvxJxVHxoCBKgQAvD_BwE) (requires license)
 
-### Import Errors
-
-If you see `ModuleNotFoundError`:
-```bash
-# Reinstall the package
-pip install -e .
-```
-
-### Configuration Validation Errors
-
-If you see "Model file not found" or similar errors:
-- **All paths in YAML must be relative to the project root**, not the YAML file location
-
-### Solver Issues
-
-- Large GEMs and pFBA require commercial solvers (CPLEX or Gurobi). Ensure your solver is properly licensed and accessible
-
-
-
-## Advanced Usage
-
-### Multiple Configurations
-
-Create separate config files for different organisms or conditions:
-
-```bash
-run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
-run-kapp-pipeline configs/run_kapp_pipeline/pputida_homomeric.yaml
-run-kapp-pipeline configs/run_kapp_pipeline/yeast_homomeric.yaml
-```
-
-### Programmatic Usage
-
-Import and use the pipeline function directly in Python scripts:
-
-```python
-from pathlib import Path
-from src.config import PipelineConfig
-from scripts.run_kapp_pipeline import run_kapp_pipeline
-
-# Create configuration programmatically
-config = PipelineConfig(
-    organism="ecoli",
-    model_path=Path("data/raw/gems/iml1515.xml"),
-    solver="cplex",
-    flux_method="pFBA",
-    carbon_uptake=[2, 6, 10],
-    oxygen_uptake=[15, 17.5, 20],
-    carbon_exchange_rxn="EX_glc__D_e",
-    oxygen_exchange_rxn="EX_o2_e",
-    p_total=[0.32, 0.435, 0.55],
-    paxdb_path=Path("data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt")
-)
-
-# Set up output directories
-output_dir = Path("results/run_kapp_pipeline/my_run/results")
-data_dir = Path("results/run_kapp_pipeline/my_run/data")
-output_dir.mkdir(parents=True, exist_ok=True)
-data_dir.mkdir(parents=True, exist_ok=True)
-
-# Run pipeline
-kapp_results, kmax_results = run_kapp_pipeline(
-    config=config,
-    output_dir=output_dir,
-    data_dir=data_dir,
-    run_name="my_run"
-)
-```
+**Notes**: 
+- The `cplex` and `gurobipy` packages are not included in the dependencies. You must manually install your licensed executable.
+- If you do not have a commercial solver license, you can still run the pipeline, using the default `glpk` solver in the COBRApy package. Note that Flux Variability Analysis (FVA) cannot be run.
 
