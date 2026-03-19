@@ -21,8 +21,8 @@ venv/
 uv.lock
 
 # Project folders
-notebooks/
-data/external_databases/
+#notebooks/
+data/external/
 results/
 logs/
 scripts/slurm/
