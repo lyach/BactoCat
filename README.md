@@ -1,31 +1,29 @@
 # 🦠 BactoCat 
 
-A computational framework to bridge the gap between *in vitro* and *in vivo* enzyme kinetics. 
+A computational framework to bridge the gap between *in vitro* and *in vivo* enzyme kinetics. **BactoCat** is an open-source, automated pipeline for computing apparent in vivo turnover numbers ($k_\text{app}$).
 
-By integrating large-scale condition-phenotype datasets, machine-learning-derived boundary fluxes, and quantitative proteomics into Genome-Scale Metabolic Models (GEMs), BactoCat calculates apparent catalytic rates ($k_{app}$) that reflect the true catalytic capacities of bacterial enzymes.
+Given a genome-scale metabolic model (GEM), experimental conditions (uptake fluxes), and/or protein abundance data, it:
+- **Parses GPR rules** — classifies every enzyme in the GEM as homomeric, 
+  isoenzyme, or complex, and retains only those tractable for $k_\text{app}$ 
+  estimation.
+- **Converts heterogeneous units** — flux (mmol gDCW⁻¹ h⁻¹) and proteomics (ppm or 
+  mol gDCW⁻¹) are reconciled to produce $k_\text{app}$ in s⁻¹.
+- **Resolves substrates** — filters cofactors and identifies the acting substrate per 
+  reaction.
+- **Aggregates over conditions** — computes $k_\text{max}$ (the maximum $k_\text{app}$ 
+  across conditions) as a lower-bound estimate of the enzyme's in vivo catalytic 
+  capacity, following Davidi et al. 2016.
+- **Benchmarks against in vitro data** — links results to EnzyExtractDB (Wei et al. 
+  2025) via enzyme sequence and substrate SMILES for *in vivo* / *in vitro* 
+  comparison.
+
 
 ## Navigation
 
-* [The *In Vivo* Kinetic Gap](#the-in-vivo-kinetic-gap)
 * [Getting Started](#getting-started)
 * [Basic usage](#basic-usage)
 * [Repository Structure](#repository-structure)
 
-## The *In Vivo* Kinetic Gap
-
-<div align="center">
-  <figure>
-    <img src="./asset/graphical_abstract.png" alt="BactoCat Pipeline" width="900">
-    <figcaption><i>BactoCat Pipeline (generated with Nano Banana 2)</i></figcaption>
-  </figure>
-</div>
-
-- Modern metabolic engineering and systems biology face a massive kinetic data scarcity. 
-   - Existing databases capture *in vitro* turnover rates for only a small fraction known metabolic reactions. 
-   - These optimized test-tube measurements frequently fail to represent the complex and constrained environments of living cells.
-- BactoCat overcomes this by working backward from whole-cell phenotypes: 
-   - The pipeline translates diverse environmental media conditions into metabolic boundary fluxes using hybrid Artificial Metabolic Networks. 
-   - It then combines these data-driven constraints with proteomics and Parsimonious Flux Balance Analysis (pFBA), to recover the apparent catalytic rates ($k_{app}$), and finally an estimate of the *in vivo* $k_{cat}$.
 
 ## Getting Started
 
@@ -130,4 +128,4 @@ A full documentation of the pipeline parameters, inputs and outputs can be found
 
 ## Project Status
 
-**BactoCat** is a project under active development. The current release successfully implements the core pipeline mapping environmental conditions to apparent catalytic rates ($k_{app}$) via standard AMN and pFBA integration. Upcoming features include the Artificial Metabolic Network module.
+**BactoCat** is a project under active development. The current release  implements the pipeline using an example *E. coli* growth dataset (Aida & Ying, 2025) to map environmental conditions to apparent catalytic rates ($k_{app}$).
