@@ -75,12 +75,12 @@ Given a genome-scale metabolic model (GEM), experimental conditions (uptake flux
 
 After set-up, you can run the main pipeline  with:
 ```bash
-python scripts/run_kapp_pipeline configs/run_kapp_pipeline/ecoli_medium_aidaying.yaml
+python scripts/run_kapp_pipeline.py configs/run_kapp_pipeline/ecoli_medium_aidaying.yaml
 ```
 
 You can also run a detailed verbose output with `v`:
 ```bash
-python scripts/run_kapp_pipeline -v configs/run_kapp_pipeline/ecoli_medium_aidaying.yaml
+python scripts/run_kapp_pipeline.py -v configs/run_kapp_pipeline/ecoli_medium_aidaying.yaml
 ```
 
 A full documentation of the pipeline parameters, inputs and outputs can be found [here](docs/kapp_pipeline.md).

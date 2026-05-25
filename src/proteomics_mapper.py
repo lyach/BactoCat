@@ -1,20 +1,15 @@
 """
-paxdb_mapper.py
+proteomics_mapper.py
 
-Purpose: 
-Map PaxDB protein abundances to an enzyme dataframe by gene identifier and calculate protein concentrations.
+Purpose:
+Map PaxDB protein abundances to an enzyme dataframe by gene identifier
+and calculate protein concentrations in mmol/gDCW.
 
-Overview: 
-This module provides functions to:
-1. Extract gene IDs from PaxDB `string_external_id` (e.g., "511145.b0440" -> "b0440").
-2. Aggregate abundances per gene (handles duplicates).
-3. Map abundances to the enzyme dataframe as `protein_ppm`.
-4. Calculate molecular weights from protein sequences using BioPython.
-5. Convert protein abundances to molar concentrations (mmol/gDCW).
 """
 
 import pandas as pd
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
+from loguru import logger
 
 
 def calculate_molecular_weight(sequence: str) -> float:
@@ -113,3 +108,56 @@ def map_paxdb_to_gene(paxdb_df: pd.DataFrame, df_enzymes: pd.DataFrame, p_total:
     enz_mapped["protein_mmol_gdcw"] = enz_mapped["protein_mol_gdcw"] * 1000
 
     return enz_mapped
+
+
+def process_enzyme_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_total: float):
+    """
+    Apply PaxDB protein mapping across all enzyme info dataframes.
+
+    Parameters
+    ----------
+    enzyme_info_dfs : dict
+        Dictionary with condition names as keys and enzyme dataframes as values
+    paxdb_path : str
+        Path to PaxDB TSV file
+    p_total : float
+        Total protein content value (g protein / g DCW)
+
+    Returns
+    -------
+    dict
+        Dictionary structure: {condition_name: mapped_dataframe}
+    """
+    logger.info(f"Loading PaxDB data from: {paxdb_path}")
+    paxdb_df = pd.read_csv(
+        paxdb_path,
+        sep="\t",
+        comment="#",
+        header=None,
+        names=["gene_name", "string_external_id", "abundance"],
+    )
+    logger.debug(f"PaxDB data loaded: {len(paxdb_df)} rows")
+
+    enzyme_protein_info_dfs = {}
+
+    logger.info(f"Processing {len(enzyme_info_dfs)} conditions with p_total={p_total}")
+
+    for condition_name, enzyme_df in enzyme_info_dfs.items():
+        try:
+            mapped_df = map_paxdb_to_gene(
+                paxdb_df=paxdb_df,
+                df_enzymes=enzyme_df,
+                p_total=p_total,
+            )
+
+            enzyme_protein_info_dfs[condition_name] = mapped_df
+            logger.debug(
+                f"  {condition_name}: {len(mapped_df)} rows, "
+                f"{mapped_df['protein_ppm'].notna().sum()} with protein data"
+            )
+
+        except Exception as e:
+            logger.error(f"Error processing {condition_name}: {str(e)}")
+            enzyme_protein_info_dfs[condition_name] = None
+
+    return enzyme_protein_info_dfs
