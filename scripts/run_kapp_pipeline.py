@@ -26,16 +26,17 @@ from src.config import PipelineConfig, load_config, PROJ_ROOT, ensure_dir_exists
 from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
 from src.gene_sequence_mapper import map_organism_to_uniprot
 from src.substrate_mapper import get_substrate_df
+from src.proteomics_mapper import process_enzyme_protein_mapping
 from src.kapp_builder import (
     create_fluxomics_dataframe,
     create_enzyme_info_dataframe,
-    process_enzyme_protein_mapping,
     create_FVA_dataframe,
     FVA_integration,
     calculate_kapp_homomeric,
     evaluate_kapp_homomeric,
     get_kmax_homomeric,
     get_eta,
+    get_kapp_dataframe,
 )
 
 
@@ -250,6 +251,12 @@ def run_kapp_pipeline(
     logger.info("=" * 50)
     logger.info("STEP 9: Filter values above physical threshold")
     kapp_dfs_filtered = evaluate_kapp_homomeric(kapp_dfs)
+
+    if config.save_kapp:
+        logger.info("Collating wide-format kapp DataFrame")
+        kapp_df = get_kapp_dataframe(kapp_dfs_filtered)
+        kapp_df.to_csv(output_dir / "kapp.csv", index=False)
+        logger.success(f"kapp DataFrame saved to: {output_dir / 'kapp.csv'}")
     
     # ==== STEP 10: Get kmax for homomeric enzymes ====
     logger.info("=" * 50)
@@ -265,13 +272,12 @@ def run_kapp_pipeline(
         kapp_dfs_eta = kapp_dfs_filtered
         kmax_df_out = kmax_df
     
-    # ==== STEP 12: Save results ====
+    # ==== STEP 12: Save results (kmax and eta) ====
     logger.info("=" * 50)
     logger.info("STEP 12: Save results")
     output_file = output_dir / f"kmax.csv"
     kmax_df_out.to_csv(output_file, index=False)
     logger.success(f"Results saved to: {output_file}")
-    
     logger.info("=" * 60)
     logger.success("Pipeline completed!")
     logger.info("=" * 60)

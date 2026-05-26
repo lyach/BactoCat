@@ -584,7 +584,7 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         upper_col = f"FVA_upper_{cond_suffix}"
 
 
-        # == Fluxomics info ==
+        # Fluxomics info
         # Merge with specific flux condition
         if lower_col not in fluxomics_df.columns or upper_col not in fluxomics_df.columns:
             if run_fva:
@@ -602,18 +602,17 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         
         condition_df = pd.merge(condition_df, flux_subset, left_on="rxn", right_on="rxn_id", how="left")
         
-        # == Substrate info ==
-        # Clean substrates df - kinGEMs specific
+        # Get substrate info
         substrates_clean = substrates_df[['Reaction', 'SMILES', 'Direction']].copy()
         
         # Merge substrate info
         condition_df = pd.merge(condition_df, substrates_clean, left_on="rxn", right_on="Reaction", how="left")
         
-        # == Sequence info ==
+        # Sequence info
         # Merge sequence info
         condition_df = pd.merge(condition_df, sequence_df, left_on="gene", right_on="model_gene_id", how="left")
         
-        # == Data cleaning and filtering ==
+        # Data cleaning and filtering
         # Drop rows with wrong direction-flux
         condition_df = condition_df[
             ((condition_df['Direction'] == 'forward') & (condition_df['flux_value'] >= 0)) |
@@ -722,6 +721,7 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
     logger.info("Completed kcat_app calculation for all conditions")
     return kapp_results
 
+
 def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lower_threshold: float = 1e-5):
     """
     Evaluate kapp for homomeric enzymes by filtering out unrealistic high and low values.
@@ -793,6 +793,73 @@ def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lo
         )
     
     return kapp_filtered_results
+
+
+def get_kapp_dataframe(kapp_filtered_results: dict) -> pd.DataFrame:
+    """
+    Collate kapp results from all conditions into a single wide-format DataFrame.
+
+    Each unique (sequence, SMILES, gene, rxn, subsystem) combination becomes one row.
+    Columns are the kcat_app value for each condition
+
+    Parameters
+    ----------
+    kapp_filtered_results : dict
+        Dictionary with structure {condition_name: pd.DataFrame} as returned by
+        ``evaluate_kapp_homomeric``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Wide-format DataFrame with one row per enzyme-substrate-reaction entry and
+        one column per growth condition.
+    """
+    index_cols = ['sequence', 'SMILES', 'gene', 'rxn', 'subsystem']
+    long_frames = []
+
+    for condition_name, df in kapp_filtered_results.items():
+        if df is None or len(df) == 0:
+            logger.debug(f"  Skipping empty/None dataframe for condition: {condition_name}")
+            continue
+
+        available_index = [c for c in index_cols if c in df.columns]
+        if 'kcat_app' not in df.columns:
+            logger.warning(f"  No 'kcat_app' for condition '{condition_name}', skipping")
+            continue
+
+        subset = df[available_index + ['kcat_app']].copy()
+        subset['_condition'] = condition_name
+        long_frames.append(subset)
+
+    if not long_frames:
+        logger.warning("No valid data found across all conditions; returning empty DataFrame")
+        return pd.DataFrame(columns=index_cols)
+
+    long_df = pd.concat(long_frames, ignore_index=True)
+    logger.debug(f"Combined long DataFrame: {len(long_df)} rows across {len(long_frames)} conditions")
+
+    available_index = [c for c in index_cols if c in long_df.columns]
+
+    # Pivot: one column per condition, values are kcat_app
+    kapp_wide = long_df.pivot_table(
+        index=available_index,
+        columns='_condition',
+        values='kcat_app',
+        aggfunc='first',
+    ).reset_index()
+
+    # Remove the column-level name left by pivot_table
+    kapp_wide.columns.name = None
+
+    n_pairs = len(kapp_wide)
+    n_conditions = len(kapp_filtered_results)
+    logger.info(
+        f"Collation summary: {n_pairs} unique enzyme-substrate entries "
+        f"across {n_conditions} conditions"
+    ) 
+
+    return kapp_wide
+
 
 def get_kmax_homomeric(kapp_results: dict):
     """

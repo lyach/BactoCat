@@ -28,3 +28,6 @@ folder_id: "aidaying"
 # ==== Filtering Thresholds ====
 upper_threshold: 1.0e6   # Upper limit for kcat_app (s⁻¹)
 lower_threshold: 1.0e-5  # Lower limit for kcat_app (s⁻¹)
+
+# ==== Save kapp dataframe ====
+save_kapp: true

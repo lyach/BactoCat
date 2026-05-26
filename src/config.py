@@ -223,6 +223,10 @@ class PipelineConfig(BaseModel):
         default=True,
         description="Whether to compute eta (kapp/kmax) and variance metrics across conditions"
     )
+    save_kapp: bool = Field(
+        default=False,
+        description="Whether to save the collated kapp dataframe as a parquet file"
+    )
     
     @field_validator('model_path', 'paxdb_path', 'substrate_df', 'sequence_df', 'medium_df', mode='before')
     @classmethod
@@ -308,6 +312,7 @@ class PipelineConfig(BaseModel):
             upper_threshold=self.upper_threshold,
             lower_threshold=self.lower_threshold,
             calculate_eta=self.calculate_eta,
+            save_kapp=self.save_kapp,
         )
 
 class EtaInVitroConfig(BaseModel):
