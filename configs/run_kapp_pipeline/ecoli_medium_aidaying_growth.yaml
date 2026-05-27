@@ -14,7 +14,7 @@ save_kapp: true
 
 
 # ============ OUTPUT FOLDER ============
-folder_id: "aidaying"
+folder_id: "aidaying_growth"
 
 
 # ============== PARAMETERS =============
@@ -24,7 +24,7 @@ lower_threshold: 1.0e-5  # Lower limit for kcat_app (s⁻¹)
 
 
 # ================ FILES ================
-medium_df: "data/processed/amns/aidaying_amn_medium.csv"
+medium_df: "data/processed/medium/aidaying_amn_medium.csv"
 paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
 substrate_df: "data/processed/substrates/iml1515_substrates.csv"
 sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"

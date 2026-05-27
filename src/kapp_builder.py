@@ -14,7 +14,71 @@ from tqdm import tqdm
 from src.FVA_analysis.utils import cobra_to_fva_problem
 
 
-def process_medium_df(medium_df: pd.DataFrame):
+# =============================================================================
+# Constants
+# ============================================================================= 
+
+FREE_METABOLITES = {
+    'EX_h2o_e',
+    'EX_h_e',
+    'EX_co2_e',
+    'EX_o2_e',
+    'EX_mg2_e',
+    'EX_nh4_e',
+    'EX_so4_e',
+    'EX_mn2_e',
+    'EX_cobalt2_e',
+    'EX_fe3_e',
+    'EX_zn2_e',
+    'EX_ca2_e',
+    'EX_fe2_e',
+}
+
+DEFAULT_FREE_BOUND = 1000.0
+
+COFACTORS = {
+            # Common cofactors
+            'O',           # water
+            'O=O',         # molecular oxygen  
+            '[H]',         # hydrogen
+            'OO',          # hydrogen peroxide
+            '[O]',         # atomic oxygen
+            '[OH-]',       # hydroxide
+            '[H+]',        # proton
+            'N',           # nitrogen (sometimes used)
+            'P',           # phosphorus
+            'S',           # sulfur
+            # Simple cofactors
+            #'C(=O)O',      # formic acid
+            #'CO',          # methanol
+            #'CCO',         # ethanol
+            #'CC(=O)O',     # acetic acid
+            #'C',           # methane
+            #'CC',          # ethane
+            #'CCC',         # propane
+            #'N',           # ammonia (as N)
+            'NN',          # hydrazine
+            'C=O',         # formaldehyde
+            'CC=O',        # acetaldehyde
+            'O=C=O',       # carbon dioxide
+            '[NH3+]',      # ammonium
+            '[Na+]',       # sodium
+            '[Cl-]',       # chloride
+            '[K+]',        # potassium
+            '[Mg+2]',      # magnesium
+            '[Ca+2]',      # calcium
+        }
+
+GROWTH_REACTION = 'BIOMASS_Ec_iML1515_core_75p37M'
+
+# =============================================================================
+# Functions
+# =============================================================================
+
+def process_medium_df(medium_df: pd.DataFrame, 
+                      include_growth: bool = True,
+                      growth_key: str = 'avg_growth',
+                      growth_reaction: str = GROWTH_REACTION):
     """
     Process a medium dataframe to extract condition dictionaries for model bound modification.
     
@@ -22,23 +86,28 @@ def process_medium_df(medium_df: pd.DataFrame):
     ----------
     medium_df : pd.DataFrame
         DataFrame where each row is a condition to simulate.
-    
+    include_growth : bool, optional
+        If True, include growth value as a key in the condition dictionary.
+    growth_key : str
+        The key in the medium dataframe that contains the growth value.
+    growth_reaction : str
+        The reaction ID of the growth reaction.
     Returns
     -------
     list of tuple
         List of (condition_id, medium_dict) tuples, where medium_dict maps
         reaction IDs to flux values for that condition.
     """
-    # Columns to exclude from reaction mapping
-    exclude_cols = {'condition_id', 'avg_growth'}
+    exclude_cols = {'condition_id', growth_key}
     
-    # Get reaction columns
     rxn_cols = [col for col in medium_df.columns if col not in exclude_cols]
     
     conditions = []
     for _, row in medium_df.iterrows():
         condition_id = str(row['condition_id'])
         medium_dict = {rxn_id: row[rxn_id] for rxn_id in rxn_cols}
+        if include_growth and growth_reaction is not None and growth_key in medium_df.columns:
+            medium_dict[growth_reaction] = row[growth_key]
         conditions.append((condition_id, medium_dict))
     
     return conditions
@@ -49,6 +118,7 @@ def create_fluxomics_dataframe(
     GEM: cobra.Model,
     medium_df: pd.DataFrame,
     medium_upper_bound: bool = False,
+    growth_reaction: str = GROWTH_REACTION,
 ):
     """
     Create a dataframe with FBA or pFBA fluxomics for all conditions.
@@ -80,14 +150,15 @@ def create_fluxomics_dataframe(
     rxn_ids = [rxn.id for rxn in GEM.reactions]
 
     logger.info("Using given medium mode for flux simulations")
-    conditions = process_medium_df(medium_df)
+    conditions = process_medium_df(medium_df, growth_reaction=growth_reaction)
 
     for condition_id, medium_dict in tqdm(conditions, desc="Flux conditions", unit="cond"):
         # Create a copy of the model to avoid modifying the original
         model_copy = GEM.copy()
 
         # Apply medium conditions using modify_reaction_bounds
-        modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=True)
+        modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound,
+                               growth_reaction=growth_reaction, verbose=True)
 
         # Run FBA or pFBA
         if flux_method == 'FBA':
@@ -118,7 +189,9 @@ def create_fluxomics_dataframe(
     logger.info(f"Fluxomics dataframe created with {num_conditions} conditions")
     return fluxomics_df
 
-def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True):
+
+def modify_reaction_bounds(model, medium, medium_upper_bound=False,
+                           growth_reaction=GROWTH_REACTION, verbose=True):
     """
     Modify reaction bounds in a COBRA model based on medium conditions.
     
@@ -135,10 +208,13 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
         The COBRA model to modify in-place
     medium : dict
         Dictionary mapping exchange reaction IDs to uptake rates
-        (positive values, as expected by model.medium)
+        (positive values, as expected by model.medium).
     medium_upper_bound : bool, optional
         If True, also fixes the upper bound so the flux is locked
         at the specified uptake value
+    growth_reaction : str, optional
+        Reaction ID of the biomass/growth reaction. If present in medium,
+        its lower and upper bounds are fixed to the measured growth value.
     verbose : bool, optional
         If True, prints information about modified reactions
     
@@ -149,24 +225,6 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
     """
     if medium is None:
         return
-    
-    # for pFBA feasibility
-    FREE_METABOLITES = {
-        'EX_h2o_e',
-        'EX_h_e',
-        'EX_co2_e',
-        'EX_o2_e',
-        'EX_mg2_e',
-        'EX_nh4_e',
-        'EX_so4_e',
-        'EX_mn2_e',
-        'EX_cobalt2_e',
-        'EX_fe3_e',
-        'EX_zn2_e',
-        'EX_ca2_e',
-        'EX_fe2_e',
-    }
-    DEFAULT_FREE_BOUND = 1000.0
      
     exchange_ids = {rxn.id for rxn in model.exchanges}
     
@@ -175,6 +233,9 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
         model_medium[k] = 0
     
     for rxn_id, flux_value in medium.items():
+        if rxn_id == growth_reaction:
+            continue
+        
         if rxn_id in FREE_METABOLITES:
             model_medium[rxn_id] = DEFAULT_FREE_BOUND
             if verbose:
@@ -191,6 +252,19 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False, verbose=True
             model_medium[rxn_id] = DEFAULT_FREE_BOUND
     
     model.medium = model_medium
+    
+    # Fix growth to measured value
+    if growth_reaction is not None and growth_reaction in medium:
+        try:
+            rxn = model.reactions.get_by_id(growth_reaction)
+            growth_value = float(medium[growth_reaction])
+            rxn.lower_bound = growth_value
+            rxn.upper_bound = growth_value
+            if verbose:
+                logger.debug(f"  Fixed growth {growth_reaction}: lower={rxn.lower_bound}, upper={rxn.upper_bound}")
+        except KeyError:
+            logger.warning(f"  Growth reaction '{growth_reaction}' not found in model, skipping")
+    
     
     if verbose:
         for rxn_id in medium:
@@ -221,6 +295,7 @@ def create_FVA_dataframe(
     mu_fraction: float = 0.9,
     solver: str = 'cplex',
     medium_upper_bound: bool = False,
+    growth_reaction: str = GROWTH_REACTION,
 ):
     """
     Run FVA for all conditions defined in ``medium_df``.
@@ -264,14 +339,15 @@ def create_FVA_dataframe(
     FVA_upper_results = {}
     
     logger.info("Using given medium mode for FVA simulations")
-    conditions = process_medium_df(medium_df)
+    conditions = process_medium_df(medium_df, growth_reaction=growth_reaction)
 
     for condition_id, medium_dict in tqdm(conditions, desc="FVA conditions", unit="cond"):
         # Copy model
         model_copy = base_model.copy()
 
         # Apply medium conditions using modify_reaction_bounds
-        modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound, verbose=True)
+        modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound,
+                               growth_reaction=growth_reaction, verbose=True)
 
         # Build FVA problem
         problem = cobra_to_fva_problem(model_copy, mu=mu_fraction)
@@ -466,39 +542,7 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         ]
         
         # Drop rows with balancing species / cofactors (unlikely to be substrates)
-        cofactors = {
-            # Common cofactors
-            'O',           # water
-            'O=O',         # molecular oxygen  
-            '[H]',         # hydrogen
-            'OO',          # hydrogen peroxide
-            '[O]',         # atomic oxygen
-            '[OH-]',       # hydroxide
-            '[H+]',        # proton
-            'N',           # nitrogen (sometimes used)
-            'P',           # phosphorus
-            'S',           # sulfur
-            # Simple cofactors
-            #'C(=O)O',      # formic acid
-            #'CO',          # methanol
-            #'CCO',         # ethanol
-            #'CC(=O)O',     # acetic acid
-            #'C',           # methane
-            #'CC',          # ethane
-            #'CCC',         # propane
-            #'N',           # ammonia (as N)
-            'NN',          # hydrazine
-            'C=O',         # formaldehyde
-            'CC=O',        # acetaldehyde
-            'O=C=O',       # carbon dioxide
-            '[NH3+]',      # ammonium
-            '[Na+]',       # sodium
-            '[Cl-]',       # chloride
-            '[K+]',        # potassium
-            '[Mg+2]',      # magnesium
-            '[Ca+2]',      # calcium
-        }
-        condition_df = condition_df[~condition_df['SMILES'].isin(cofactors)]
+        condition_df = condition_df[~condition_df['SMILES'].isin(COFACTORS)]
         
         # Remove rows with 0 flux 
         condition_df = condition_df[condition_df['flux_value'] != 0]
