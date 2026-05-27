@@ -1,26 +1,13 @@
-# Python cache and temporary files
+# python
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-eggs/
-.eggs/
 *.egg-info/
-*.egg
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints
-
-# Environment
-.env/
+# environment and IDE
 .venv/
-env/
-venv/
-.venv310/
 uv.lock
+.cursor/
 
-# Project folders
+# project folders
 notebooks/
 data/external_databases/
 results/
