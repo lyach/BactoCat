@@ -155,6 +155,7 @@ def run_kapp_pipeline(
         flux_method=config.flux_method,
         GEM=model,
         medium_df=medium_df_loaded,
+        include_growth=config.include_growth,
     )
     
     # ==== STEP 3: Run flux variability analysis ====
@@ -170,6 +171,7 @@ def run_kapp_pipeline(
                 medium_df=medium_df_loaded,
                 mu_fraction=config.mu_fraction,
                 solver=config.solver,
+                include_growth=config.include_growth,
             )
             logger.info("FVA dataframe created successfully")
 
@@ -354,6 +356,7 @@ Output:
     logger.info(f"Flux method: {config.flux_method}")
     logger.info(f"Solver: {config.solver}")
     logger.info(f"Medium dataframe: {config.medium_df.name}")
+    logger.info(f"Include growth: {config.include_growth}")
     logger.info(f"P_total: {config.p_total}")
     logger.info(f"Substrate data: {config.substrate_df.name if config.substrate_df else 'Auto-generated'}")
     logger.info(f"Sequence data: {config.sequence_df.name if config.sequence_df else 'Auto-generated'}")

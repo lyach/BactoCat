@@ -9,6 +9,7 @@ model_path: "data/raw/gems/iml1515.xml"
 solver: "cplex"
 flux_method: "FBA"
 run_fva: false
+include_growth: true
 calculate_eta: true
 save_kapp: true
 

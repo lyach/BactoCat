@@ -191,6 +191,10 @@ class PipelineConfig(BaseModel):
         default=True,
         description="Run flux variability analysis step"
     )
+    include_growth: bool = Field(
+        default=False,
+        description="Fix the growth reaction bounds to the measured value in medium_df"
+    )
 
     # Proteomics
     p_total: float = Field(

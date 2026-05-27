@@ -119,6 +119,7 @@ def create_fluxomics_dataframe(
     medium_df: pd.DataFrame,
     medium_upper_bound: bool = False,
     growth_reaction: str = GROWTH_REACTION,
+    include_growth: bool = False,
 ):
     """
     Create a dataframe with FBA or pFBA fluxomics for all conditions.
@@ -150,7 +151,7 @@ def create_fluxomics_dataframe(
     rxn_ids = [rxn.id for rxn in GEM.reactions]
 
     logger.info("Using given medium mode for flux simulations")
-    conditions = process_medium_df(medium_df, growth_reaction=growth_reaction)
+    conditions = process_medium_df(medium_df, include_growth=include_growth, growth_reaction=growth_reaction)
 
     for condition_id, medium_dict in tqdm(conditions, desc="Flux conditions", unit="cond"):
         # Create a copy of the model to avoid modifying the original
@@ -296,6 +297,7 @@ def create_FVA_dataframe(
     solver: str = 'cplex',
     medium_upper_bound: bool = False,
     growth_reaction: str = GROWTH_REACTION,
+    include_growth: bool = False,
 ):
     """
     Run FVA for all conditions defined in ``medium_df``.
@@ -339,7 +341,7 @@ def create_FVA_dataframe(
     FVA_upper_results = {}
     
     logger.info("Using given medium mode for FVA simulations")
-    conditions = process_medium_df(medium_df, growth_reaction=growth_reaction)
+    conditions = process_medium_df(medium_df, include_growth=include_growth, growth_reaction=growth_reaction)
 
     for condition_id, medium_dict in tqdm(conditions, desc="FVA conditions", unit="cond"):
         # Copy model
