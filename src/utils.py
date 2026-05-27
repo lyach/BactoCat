@@ -20,6 +20,30 @@ warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+M9_MEDIA = {'EX_glc__D_e', 'EX_so4_e', 'EX_o2_e', 'EX_nh4_e', 'EX_pi_e', 'EX_h2o_e',
+    'EX_h_e', 'EX_k_e', 'EX_mg2_e', 'EX_na1_e', 'EX_ca2_e', 'EX_cl_e', 'EX_cu2_e', 'EX_fe2_e', 
+    'EX_fe3_e', 'EX_mn2_e', 'EX_mobd_e', 'EX_ni2_e', 'EX_zn2_e', 'EX_cobalt2_e'}
+
+M9_MEDIA_BOUND = 1000.0
+
+CARBON_SOURCE_MAP = {
+    'glucose':     'EX_glc__D_e',
+    'galactose':   'EX_gal_e',
+    'acetate':     'EX_ac_e',
+    'pyruvate':    'EX_pyr_e',
+    'fumarate':    'EX_fum_e',
+    'succinate':   'EX_succ_e',
+    'glucosamine': 'EX_gam_e',
+    'glycerol':    'EX_glyc_e',
+    'mannose':     'EX_man__D_e',
+    'xylose':      'EX_xyl__D_e',
+    'fructose':    'EX_fru_e',
+}
+
+# =============================================================================
 # Modeling functions
 # =============================================================================
 
@@ -80,16 +104,16 @@ def get_constrained_growth(model: cobra.Model,
     return pd.DataFrame(results)
 
 # =============================================================================
-# Functions for Aida dataset preprocessing
+# Functions for AMN dataset preprocessing
 # =============================================================================
 
-def prepare_aida_dataset(df_pred_path: pd.DataFrame) -> pd.DataFrame:
+def prepare_amn_dataset(df_pred_path: pd.DataFrame) -> pd.DataFrame:
     """
-    Prepare the Aida dataset to be used in the BactoCat pipeline.
+    Prepare the AMN dataset to be used in the BactoCat pipeline.
     """
     # Load
     df_pred = pd.read_csv(df_pred_path)
-    print(f"Loaded Aida predictions df with shape {df_pred.shape}")
+    print(f"Loaded AMN predictions df with shape {df_pred.shape}")
     
     # Add condition id
     df_pred['condition_id'] = [f'cond{i+1}' for i in range(len(df_pred))]
@@ -119,6 +143,55 @@ def prepare_aida_dataset(df_pred_path: pd.DataFrame) -> pd.DataFrame:
     df_pred = df_pred[cols]
     
     return df_pred
+
+
+# =============================================================================
+# Functions for Davidi dataset preprocessing
+# =============================================================================
+
+def prepare_davidi_dataset(growth_conditions_path: str) -> pd.DataFrame:
+    """
+    Convert Davidi growth conditions CSV into the BactoCat conditions format.
+
+    All M9_MEDIA exchange reactions are set to M9_MEDIA_BOUND (1000.0).
+    For non-glucose carbon sources, EX_glc__D_e is set to 0 and the
+    appropriate exchange reaction is added at M9_MEDIA_BOUND.
+    """
+    df = pd.read_csv(growth_conditions_path)
+    logger.info(f"Loaded Davidi growth conditions with shape {df.shape}")
+
+    rows = []
+    for _, row in df.iterrows():
+        growth_cond = str(row['growth condition'])
+        growth_rate = float(row['growth rate [h-1]'])
+        carbon_source = str(row['media (M9 plus)']).strip().lower()
+
+        prefix = growth_cond[:3].lower()
+        rate_int = round(growth_rate * 100)
+        condition_id = f"{prefix}_{rate_int:03d}"
+
+        new_row = {'condition_id': condition_id, 'avg_growth': growth_rate}
+
+        for ex in M9_MEDIA:
+            new_row[ex] = M9_MEDIA_BOUND
+
+        carbon_source_ex = CARBON_SOURCE_MAP.get(carbon_source)
+        if carbon_source_ex is None:
+            logger.warning(f"Unknown carbon source '{carbon_source}' for condition '{growth_cond}'; EX_glc__D_e kept open.")
+        elif carbon_source_ex != 'EX_glc__D_e':
+            new_row['EX_glc__D_e'] = 0.0
+            new_row[carbon_source_ex] = M9_MEDIA_BOUND
+
+        rows.append(new_row)
+
+    result_df = pd.DataFrame(rows)
+
+    fixed_cols = ['condition_id', 'avg_growth']
+    media_cols = sorted(c for c in result_df.columns if c not in fixed_cols)
+    result_df = result_df[fixed_cols + media_cols]
+
+    logger.info(f"Prepared Davidi conditions df with shape {result_df.shape}")
+    return result_df
 
 # =============================================================================
 # Functions for specific kcat datasets
