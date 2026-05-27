@@ -154,10 +154,6 @@ def run_kapp_pipeline(
     fluxomics_df = create_fluxomics_dataframe(
         flux_method=config.flux_method,
         GEM=model,
-        carbon_uptake=config.carbon_uptake,
-        oxygen_uptake=config.oxygen_uptake,
-        carbon_exchange_rxn=config.carbon_exchange_rxn,
-        oxygen_exchange_rxn=config.oxygen_exchange_rxn,
         medium_df=medium_df_loaded,
     )
     
@@ -171,13 +167,9 @@ def run_kapp_pipeline(
         try:
             fva_df = create_FVA_dataframe(
                 GEM_path=str(config.model_path),
-                carbon_uptake=config.carbon_uptake,
-                oxygen_uptake=config.oxygen_uptake,
+                medium_df=medium_df_loaded,
                 mu_fraction=config.mu_fraction,
                 solver=config.solver,
-                carbon_exchange_rxn=config.carbon_exchange_rxn,
-                oxygen_exchange_rxn=config.oxygen_exchange_rxn,
-                medium_df=medium_df_loaded,
             )
             logger.info("FVA dataframe created successfully")
 
@@ -279,8 +271,6 @@ def run_kapp_pipeline(
     kmax_df_out.to_csv(output_file, index=False)
     logger.success(f"Results saved to: {output_file}")
     logger.info("=" * 60)
-    logger.success("Pipeline completed!")
-    logger.info("=" * 60)
     
     return kmax_df_out
 
@@ -363,13 +353,7 @@ Output:
     logger.info(f"Model: {config.model_path.name}")
     logger.info(f"Flux method: {config.flux_method}")
     logger.info(f"Solver: {config.solver}")
-    if config.medium_df is not None:
-        logger.info(f"Medium dataframe: {config.medium_df.name}")
-    else:
-        logger.info(f"Carbon uptake rates: {config.carbon_uptake}")
-        logger.info(f"Oxygen uptake rates: {config.oxygen_uptake}")
-        logger.info(f"Carbon exchange rxn: {config.carbon_exchange_rxn}")
-        logger.info(f"Oxygen exchange rxn: {config.oxygen_exchange_rxn}")
+    logger.info(f"Medium dataframe: {config.medium_df.name}")
     logger.info(f"P_total: {config.p_total}")
     logger.info(f"Substrate data: {config.substrate_df.name if config.substrate_df else 'Auto-generated'}")
     logger.info(f"Sequence data: {config.sequence_df.name if config.sequence_df else 'Auto-generated'}")

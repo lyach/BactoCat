@@ -250,12 +250,9 @@ class PipelineConfig(BaseModel):
     
     @model_validator(mode='after')
     def validate_flux_inputs(self):
-        """Validate that either medium_df, or both carbon/oxygen uptake are provided."""
+        """Validate that medium_df is provided."""
         if self.medium_df is None:
-            if self.carbon_uptake is None or self.oxygen_uptake is None:
-                raise ValueError(
-                    "Either 'medium_df', or both 'carbon_uptake' and 'oxygen_uptake' must be provided."
-                )
+            raise ValueError("'medium_df' must be provided.")
         return self
     
     def resolve_paths(self, yaml_dir: Path, project_root: Path) -> "PipelineConfig":
