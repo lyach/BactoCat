@@ -1,0 +1,36 @@
+# Configuration file for kapp pipeline
+
+# Homomeric kmax calculation for E. coli (iML1515) using 
+# the mapped medium from Aida & Ying 2025
+
+# ========= MODEL CONFIGURATION =========
+organism: "ecoli"
+model_path: "data/raw/gems/iml1515.xml"
+solver: "cplex"
+flux_method: "pFBA"
+run_fva: false
+include_growth: false
+calculate_eta: true
+save_kapp: true
+changing_proteome: false
+
+
+# ============ OUTPUT FOLDER ============
+folder_id: "aidaying"
+
+
+# ============== PARAMETERS =============
+p_total: 0.55            # Total protein fraction (g protein / g DCW)
+upper_threshold: 1.0e6   # Upper limit for kcat_app (s⁻¹)
+lower_threshold: 1.0e-5  # Lower limit for kcat_app (s⁻¹)
+free_metabolites: [
+    EX_h2o_e, EX_h_e, EX_co2_e,
+    EX_o2_e, EX_mg2_e, EX_nh4_e,
+    EX_so4_e, EX_mn2_e, EX_cobalt2_e,
+    EX_fe3_e, EX_zn2_e, EX_ca2_e, EX_fe2_e]
+
+# ================ FILES ================
+medium_df: "data/processed/medium/aidaying_amn_medium.csv"
+paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
+substrate_df: "data/processed/substrates/iml1515_substrates.csv"
+sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"
