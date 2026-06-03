@@ -16,23 +16,7 @@ from src.FVA_analysis.utils import cobra_to_fva_problem
 
 # =============================================================================
 # Constants
-# ============================================================================= 
-
-FREE_METABOLITES = {
-    'EX_h2o_e',
-    'EX_h_e',
-    'EX_co2_e',
-    'EX_o2_e',
-    'EX_mg2_e',
-    'EX_nh4_e',
-    'EX_so4_e',
-    'EX_mn2_e',
-    'EX_cobalt2_e',
-    'EX_fe3_e',
-    'EX_zn2_e',
-    'EX_ca2_e',
-    'EX_fe2_e',
-}
+# =============================================================================
 
 DEFAULT_FREE_BOUND = 1000.0
 
@@ -120,6 +104,7 @@ def create_fluxomics_dataframe(
     medium_upper_bound: bool = False,
     growth_reaction: str = GROWTH_REACTION,
     include_growth: bool = False,
+    free_metabolites=None,
 ):
     """
     Create a dataframe with FBA or pFBA fluxomics for all conditions.
@@ -135,6 +120,8 @@ def create_fluxomics_dataframe(
         ``condition_id`` column.
     medium_upper_bound : bool, optional
         If True, sets both lower and upper bounds when applying medium conditions.
+    free_metabolites : list, optional
+        Exchange reaction IDs to leave unconstrained.
 
     Returns
     -------
@@ -153,44 +140,55 @@ def create_fluxomics_dataframe(
     logger.info("Using given medium mode for flux simulations")
     conditions = process_medium_df(medium_df, include_growth=include_growth, growth_reaction=growth_reaction)
 
+    failed_conditions = []
+
     for condition_id, medium_dict in tqdm(conditions, desc="Flux conditions", unit="cond"):
-        # Create a copy of the model to avoid modifying the original
         model_copy = GEM.copy()
 
-        # Apply medium conditions using modify_reaction_bounds
         modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound,
-                               growth_reaction=growth_reaction, verbose=True)
+                               growth_reaction=growth_reaction, verbose=True,
+                               free_metabolites=free_metabolites)
 
-        # Run FBA or pFBA
-        if flux_method == 'FBA':
-            solution = model_copy.optimize()
-        elif flux_method == 'pFBA':
-            solution = flux_analysis.pfba(model_copy)
-            objective_value = solution.fluxes['BIOMASS_Ec_iML1515_core_75p37M']
-        else:
-            raise ValueError(f"Invalid method '{flux_method}'. Must be 'FBA' or 'pFBA'.")
+        try:
+            if flux_method == 'FBA':
+                solution = model_copy.optimize()
+            elif flux_method == 'pFBA':
+                solution = flux_analysis.pfba(model_copy)
+            else:
+                raise ValueError(f"Invalid method '{flux_method}'. Must be 'FBA' or 'pFBA'.")
+        except (cobra.exceptions.Infeasible, cobra.exceptions.OptimizationError) as e:
+            logger.warning(f"Condition '{condition_id}' failed optimization: {e} — skipping.")
+            failed_conditions.append(condition_id)
+            continue
 
-        # Store results
-        col_name = condition_id
         if solution.status == 'optimal':
-            flux_results[col_name] = [solution.fluxes[rxn_id] for rxn_id in rxn_ids]
+            flux_results[condition_id] = [solution.fluxes[rxn_id] for rxn_id in rxn_ids]
         else:
-            logger.warning(f"Condition {condition_id} optimization failed with status: {solution.status}")
-            flux_results[col_name] = [0.0] * len(rxn_ids)
+            logger.warning(f"Condition '{condition_id}' returned status '{solution.status}' — skipping.")
+            failed_conditions.append(condition_id)
 
-    num_conditions = len(conditions)
-    
+    if failed_conditions:
+        logger.warning(
+            f"{len(failed_conditions)}/{len(conditions)} conditions failed and were discarded: "
+            f"{failed_conditions}"
+        )
+
+    if not flux_results:
+        raise RuntimeError("All conditions failed optimization — cannot proceed.")
+
     fluxomics_df = pd.concat(
         [pd.DataFrame({'rxn_id': rxn_ids}), pd.DataFrame(flux_results, index=range(len(rxn_ids)))],
         axis=1,
     )
-    
-    logger.info(f"Fluxomics dataframe created with {num_conditions} conditions")
+
+    logger.info(f"Fluxomics dataframe created with {len(flux_results)} successful conditions "
+                f"(out of {len(conditions)} total)")
     return fluxomics_df
 
 
 def modify_reaction_bounds(model, medium, medium_upper_bound=False,
-                           growth_reaction=GROWTH_REACTION, verbose=True):
+                           growth_reaction=GROWTH_REACTION, verbose=True,
+                           free_metabolites=None):
     """
     Modify reaction bounds in a COBRA model based on medium conditions.
     
@@ -216,7 +214,8 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False,
         its lower and upper bounds are fixed to the measured growth value.
     verbose : bool, optional
         If True, prints information about modified reactions
-    
+    free_metabolites : list or set, optional
+        Exchange reaction IDs to leave unconstrained.
     Returns
     -------
     None
@@ -224,7 +223,9 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False,
     """
     if medium is None:
         return
-     
+
+    _free = set(free_metabolites) if free_metabolites else set()
+
     exchange_ids = {rxn.id for rxn in model.exchanges}
     
     model_medium = model.medium
@@ -235,18 +236,20 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False,
         if rxn_id == growth_reaction:
             continue
         
-        if rxn_id in FREE_METABOLITES:
+        if rxn_id in _free:
             model_medium[rxn_id] = DEFAULT_FREE_BOUND
             if verbose:
                 logger.debug(f"  {rxn_id}: free metabolite, left unconstrained")
             continue
         
+        if pd.isna(flux_value):
+            continue
         if rxn_id in exchange_ids:
             model_medium[rxn_id] = abs(float(flux_value))
         else:
             logger.warning(f"  Reaction '{rxn_id}' not found in model, skipping")
     
-    for rxn_id in FREE_METABOLITES:
+    for rxn_id in _free:
         if rxn_id in exchange_ids:
             model_medium[rxn_id] = DEFAULT_FREE_BOUND
     
@@ -264,10 +267,9 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False,
         except KeyError:
             logger.warning(f"  Growth reaction '{growth_reaction}' not found in model, skipping")
     
-    
     if verbose:
         for rxn_id in medium:
-            if rxn_id in FREE_METABOLITES:
+            if rxn_id in _free:
                 continue
             try:
                 rxn = model.reactions.get_by_id(rxn_id)
@@ -277,7 +279,7 @@ def modify_reaction_bounds(model, medium, medium_upper_bound=False,
     
     if medium_upper_bound:
         for rxn_id, flux_value in medium.items():
-            if rxn_id in FREE_METABOLITES:
+            if rxn_id in _free:
                 continue
             try:
                 rxn = model.reactions.get_by_id(rxn_id)
@@ -296,6 +298,7 @@ def create_FVA_dataframe(
     medium_upper_bound: bool = False,
     growth_reaction: str = GROWTH_REACTION,
     include_growth: bool = False,
+    free_metabolites=None,
 ):
     """
     Run FVA for all conditions defined in ``medium_df``.
@@ -313,6 +316,8 @@ def create_FVA_dataframe(
         Solver to use ('cplex' or 'gurobi'). Default is 'cplex'.
     medium_upper_bound : bool, optional
         If True, sets both lower and upper bounds when applying medium conditions.
+    free_metabolites : list, optional
+        Exchange reaction IDs to leave unconstrained.
 
     Returns
     -------
@@ -341,19 +346,23 @@ def create_FVA_dataframe(
     logger.info("Using given medium mode for FVA simulations")
     conditions = process_medium_df(medium_df, include_growth=include_growth, growth_reaction=growth_reaction)
 
+    failed_conditions = []
+
     for condition_id, medium_dict in tqdm(conditions, desc="FVA conditions", unit="cond"):
-        # Copy model
         model_copy = base_model.copy()
 
-        # Apply medium conditions using modify_reaction_bounds
         modify_reaction_bounds(model_copy, medium_dict, medium_upper_bound=medium_upper_bound,
-                               growth_reaction=growth_reaction, verbose=True)
+                               growth_reaction=growth_reaction, verbose=True,
+                               free_metabolites=free_metabolites)
 
-        # Build FVA problem
-        problem = cobra_to_fva_problem(model_copy, mu=mu_fraction)
+        try:
+            problem = cobra_to_fva_problem(model_copy, mu=mu_fraction)
+            fva_results = fva_solve_faster(problem)
+        except (cobra.exceptions.Infeasible, cobra.exceptions.OptimizationError, Exception) as e:
+            logger.warning(f"FVA condition '{condition_id}' failed: {e} — skipping.")
+            failed_conditions.append(condition_id)
+            continue
 
-        # Run FVA
-        fva_results = fva_solve_faster(problem)
         fva_df = pd.DataFrame({
             'rxn_id': [rxn.id for rxn in model_copy.reactions],
             'FVA_lower': fva_results.lower_bound,
@@ -361,17 +370,23 @@ def create_FVA_dataframe(
         })
         fva_df = fva_df.set_index('rxn_id').reindex(rxn_ids).reset_index()
 
-        # Store FVA lower/upper bounds
         FVA_lower_results[f'FVA_lower_{condition_id}'] = fva_df['FVA_lower'].values
         FVA_upper_results[f'FVA_upper_{condition_id}'] = fva_df['FVA_upper'].values
 
-    num_conditions = len(conditions)
-    
-    # Build the output dataframe
+    if failed_conditions:
+        logger.warning(
+            f"FVA: {len(failed_conditions)}/{len(conditions)} conditions failed and were discarded: "
+            f"{failed_conditions}"
+        )
+
+    if not FVA_lower_results:
+        raise RuntimeError("All FVA conditions failed — cannot proceed.")
+
     all_data = {'rxn_id': rxn_ids, **FVA_lower_results, **FVA_upper_results}
     fva_combined = pd.DataFrame(all_data)
-    
-    logger.info(f"FVA dataframe created with {num_conditions} conditions")
+
+    logger.info(f"FVA dataframe created with {len(FVA_lower_results)} successful conditions "
+                f"(out of {len(conditions)} total)")
     return fva_combined
 
 

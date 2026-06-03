@@ -26,7 +26,7 @@ from src.config import PipelineConfig, load_config, PROJ_ROOT, ensure_dir_exists
 from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
 from src.gene_sequence_mapper import map_organism_to_uniprot
 from src.substrate_mapper import get_substrate_df
-from src.proteomics_mapper import process_enzyme_protein_mapping
+from src.proteomics_mapper import paxdb_protein_mapping, changing_proteome_mapping
 from src.kapp_builder import (
     create_fluxomics_dataframe,
     create_enzyme_info_dataframe,
@@ -156,6 +156,7 @@ def run_kapp_pipeline(
         GEM=model,
         medium_df=medium_df_loaded,
         include_growth=config.include_growth,
+        free_metabolites=config.free_metabolites,
     )
     
     # ==== STEP 3: Run flux variability analysis ====
@@ -172,6 +173,7 @@ def run_kapp_pipeline(
                 mu_fraction=config.mu_fraction,
                 solver=config.solver,
                 include_growth=config.include_growth,
+                free_metabolites=config.free_metabolites,
             )
             logger.info("FVA dataframe created successfully")
 
@@ -232,9 +234,16 @@ def run_kapp_pipeline(
     # ==== STEP 7: Map proteomics information ====
     logger.info("=" * 50)
     logger.info("STEP 7: Map proteomics information")
-    enzyme_protein_info_dfs = process_enzyme_protein_mapping(
-        enzymes_info_dfs, str(config.paxdb_path), p_total=config.p_total
-    )
+    # Changing proteome (condition-matched)
+    if config.changing_proteome==True:
+        enzyme_protein_info_dfs = changing_proteome_mapping(
+            enzymes_info_dfs, str(config.proteomics_path)
+        )
+    # Static Proteome (PaxDB)
+    else:
+        enzyme_protein_info_dfs = paxdb_protein_mapping(
+            enzymes_info_dfs, str(config.paxdb_path), p_total=config.p_total
+        )
     
     # ==== STEP 8: Calculate kapp for homomeric enzymes ====
     logger.info("=" * 50)
@@ -283,14 +292,13 @@ def main():
         prog="run-kapp-pipeline",
         description="Run kapp pipeline for building enzyme kinetic datasets from metabolic models",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 Examples:
   run-kapp-pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
   python -m scripts.run_kapp_pipeline configs/run_kapp_pipeline/ecoli_homomeric.yaml
 
 Output:
-  Results are saved to results/run_kapp_pipeline/{organism}_{date}_{id}/
-  with subdirectories /data (intermediate files) and /results (final outputs)
+  Results are saved under results/run_kapp_pipeline/run_name
         """,
     )
     
@@ -350,6 +358,7 @@ Output:
     logger.info("=" * 60)
     logger.info("KAPP PIPELINE CONFIGURATION")
     logger.info("=" * 60)
+    logger.info(f"Run date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     logger.info(f"Run name: {run_name}")
     logger.info(f"Organism: {config.organism}")
     logger.info(f"Model: {config.model_path.name}")
@@ -357,12 +366,20 @@ Output:
     logger.info(f"Solver: {config.solver}")
     logger.info(f"Medium dataframe: {config.medium_df.name}")
     logger.info(f"Include growth: {config.include_growth}")
-    logger.info(f"P_total: {config.p_total}")
+    if config.free_metabolites:
+        logger.info(f"Free metabolites: {config.free_metabolites}")
+    else:
+        pass
+    logger.info(f"Save kapp dataframe: {config.save_kapp}")
+    logger.info(f"Changing proteome: {config.changing_proteome}")
+    if config.changing_proteome==True:
+        logger.info(f"Changing proteome data: {config.proteomics_path.name}")
+    else:
+        logger.info(f"PaxDB data: {config.paxdb_path.name}")
+        logger.info(f"Total: {config.p_total}")
     logger.info(f"Substrate data: {config.substrate_df.name if config.substrate_df else 'Auto-generated'}")
     logger.info(f"Sequence data: {config.sequence_df.name if config.sequence_df else 'Auto-generated'}")
-    logger.info(f"PaxDB data: {config.paxdb_path.name}")
     logger.info(f"Output directory: {output_dir.relative_to(PROJ_ROOT)}")
-    logger.info(f"Data directory: {data_dir.relative_to(PROJ_ROOT)}")
     logger.info("=" * 60)
     
     # Run the pipeline

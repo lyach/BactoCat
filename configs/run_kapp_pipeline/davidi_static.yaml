@@ -1,0 +1,32 @@
+# Configuration file for kapp pipeline
+
+# Homomeric kmax calculation for E. coli (iML1515) using 
+# the Davidi et al. 2017 growth conditions and matching proteomics data
+
+# ========= MODEL CONFIGURATION =========
+organism: "ecoli"
+model_path: "data/raw/gems/iml1515.xml"
+solver: "cplex"
+flux_method: "pFBA"
+run_fva: false
+include_growth: true
+calculate_eta: true
+save_kapp: true
+changing_proteome: false
+
+
+# ============ OUTPUT FOLDER ============
+folder_id: "davidi_dynamic"
+
+
+# ============== PARAMETERS =============
+p_total: 0.55            # Total protein fraction (g protein / g DCW)
+upper_threshold: 1.0e6   # Upper limit for kcat_app (s⁻¹)
+lower_threshold: 1.0e-5  # Lower limit for kcat_app (s⁻¹)
+
+
+# ================ FILES ================
+medium_df: "data/processed/medium/davidi_medium.csv"
+paxdb_path: "data/raw/paxdb/ecoli_whole_organism_integrated_511145.txt"
+substrate_df: "data/processed/substrates/iml1515_substrates.csv"
+sequence_df: "data/processed/uniprot/ecoli_uniprot_seqs.csv"

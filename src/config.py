@@ -195,13 +195,27 @@ class PipelineConfig(BaseModel):
         default=False,
         description="Fix the growth reaction bounds to the measured value in medium_df"
     )
+    free_metabolites: Optional[list[str]] = Field(
+        default=None,
+        description="Exchange reaction IDs to leave unconstrained."
+    )
 
     # Proteomics
-    p_total: float = Field(
-        description="Total protein fraction (g protein / g DCW)"
+    p_total: Optional[float] = Field(
+        default=None,
+        description="Total protein fraction (g protein / g DCW); required when changing_proteome=False"
     )
-    paxdb_path: Path = Field(
-        description="Path to PaxDB file"
+    changing_proteome: bool = Field(
+        default=False,
+        description="Use condition-matched proteomics instead of static PaxDB data"
+    )
+    paxdb_path: Optional[Path] = Field(
+        default=None,
+        description="Path to PaxDB file (required when changing_proteome=False)"
+    )
+    proteomics_path: Optional[Path] = Field(
+        default=None,
+        description="Path to Davidi-style proteomics CSV (required when changing_proteome=True)"
     )
     
     # Optional input data
@@ -232,7 +246,7 @@ class PipelineConfig(BaseModel):
         description="Whether to save the collated kapp dataframe as a parquet file"
     )
     
-    @field_validator('model_path', 'paxdb_path', 'substrate_df', 'sequence_df', 'medium_df', mode='before')
+    @field_validator('model_path', 'paxdb_path', 'proteomics_path', 'substrate_df', 'sequence_df', 'medium_df', mode='before')
     @classmethod
     def convert_to_path(cls, v):
         """Convert string paths to Path objects."""
@@ -243,13 +257,27 @@ class PipelineConfig(BaseModel):
         return v
     
     @model_validator(mode='after')
+    def validate_proteomics_fields(self):
+        """Validate that the correct proteomics fields are provided for the chosen mode."""
+        if self.changing_proteome:
+            if self.proteomics_path is None:
+                raise ValueError("'proteomics_path' must be provided when changing_proteome=True")
+        else:
+            if self.paxdb_path is None:
+                raise ValueError("'paxdb_path' must be provided when changing_proteome=False")
+            if self.p_total is None:
+                raise ValueError("'p_total' must be provided when changing_proteome=False")
+        return self
+
+    @model_validator(mode='after')
     def validate_paths_exist(self):
         """Validate that required files exist (when paths are absolute)."""
-        # Only validate absolute paths; relative paths are resolved later
         if self.model_path.is_absolute() and not self.model_path.exists():
             raise ValueError(f"Model file not found: {self.model_path}")
-        if self.paxdb_path.is_absolute() and not self.paxdb_path.exists():
+        if self.paxdb_path is not None and self.paxdb_path.is_absolute() and not self.paxdb_path.exists():
             raise ValueError(f"PaxDB file not found: {self.paxdb_path}")
+        if self.proteomics_path is not None and self.proteomics_path.is_absolute() and not self.proteomics_path.exists():
+            raise ValueError(f"Proteomics file not found: {self.proteomics_path}")
         return self
     
     @model_validator(mode='after')
@@ -306,8 +334,12 @@ class PipelineConfig(BaseModel):
             mu_fraction=self.mu_fraction,
             medium_df=resolve(self.medium_df),
             run_fva=self.run_fva,
+            include_growth=self.include_growth,
+            free_metabolites=self.free_metabolites,
             p_total=self.p_total,
+            changing_proteome=self.changing_proteome,
             paxdb_path=resolve(self.paxdb_path),
+            proteomics_path=resolve(self.proteomics_path),
             substrate_df=resolve(self.substrate_df),
             sequence_df=resolve(self.sequence_df),
             upper_threshold=self.upper_threshold,

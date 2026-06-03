@@ -1,15 +1,18 @@
 """
 proteomics_mapper.py
 
-Purpose:
-Map PaxDB protein abundances to an enzyme dataframe by gene identifier
+Map protein abundances to an enzyme dataframe by gene identifier
 and calculate protein concentrations in mmol/gDCW.
+
+
 
 """
 
 import pandas as pd
 from Bio.SeqUtils.ProtParam import ProteinAnalysis
 from loguru import logger
+
+from src.utils import davidi_condition_to_id
 
 
 def calculate_molecular_weight(sequence: str) -> float:
@@ -81,7 +84,7 @@ def map_paxdb_to_gene(paxdb_df: pd.DataFrame, df_enzymes: pd.DataFrame, p_total:
     pax["abundance"] = pd.to_numeric(pax["abundance"], errors="coerce")
     pax = pax.dropna(subset=["gene", "abundance"])
 
-    # Aggregate in case there are multiple entries per gene (mean by default)
+    # If multiple entries per gene, take the mean
     pax_gene = (
         pax.groupby("gene", as_index=False)["abundance"]
         .mean()
@@ -110,7 +113,7 @@ def map_paxdb_to_gene(paxdb_df: pd.DataFrame, df_enzymes: pd.DataFrame, p_total:
     return enz_mapped
 
 
-def process_enzyme_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_total: float):
+def paxdb_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_total: float):
     """
     Apply PaxDB protein mapping across all enzyme info dataframes.
 
@@ -156,6 +159,91 @@ def process_enzyme_protein_mapping(enzyme_info_dfs: dict, paxdb_path: str, p_tot
                 f"{mapped_df['protein_ppm'].notna().sum()} with protein data"
             )
 
+        except Exception as e:
+            logger.error(f"Error processing {condition_name}: {str(e)}")
+            enzyme_protein_info_dfs[condition_name] = None
+
+    return enzyme_protein_info_dfs
+
+
+def map_davidi_to_gene(proteomics_df: pd.DataFrame, df_enzymes: pd.DataFrame, condition_col: str) -> pd.DataFrame:
+    """
+    Map Davidi proteomics abundances to enzymes by gene ID for a specific condition.
+
+    Parameters
+    ----------
+    proteomics_df : pd.DataFrame
+        Proteomics dataframe with 'gene' column and condition columns
+    df_enzymes : pd.DataFrame
+        Enzyme dataframe with a 'gene' column
+    condition_col : str
+        Column name in proteomics_df corresponding to the target condition
+
+    Returns
+    -------
+    pd.DataFrame
+        Copy of df_enzymes with a new 'protein_mmol_gdcw' column (NaN if no match)
+    """
+    if "gene" not in df_enzymes.columns:
+        raise KeyError("df_enzymes missing required column: 'gene'")
+    if condition_col not in proteomics_df.columns:
+        raise KeyError(f"Condition column '{condition_col}' not found in proteomics data")
+
+    prot = proteomics_df[["gene", condition_col]].copy()
+    prot["protein_mmol_gdcw"] = pd.to_numeric(prot[condition_col], errors="coerce")
+    prot = prot[["gene", "protein_mmol_gdcw"]]
+
+    return df_enzymes.copy().merge(prot, on="gene", how="left")
+
+
+def changing_proteome_mapping(enzyme_info_dfs: dict, proteomics_path: str) -> dict:
+    """
+    Apply proteome mapping (condition-matched) across all enzyme info dataframes.
+
+    Parameters
+    ----------
+    enzyme_info_dfs : dict
+        Dictionary with condition names as keys and enzyme dataframes as values.
+        Keys must already be normalised via `davidi_condition_to_id`.
+    proteomics_path : str
+        Path to proteomics CSV with columns:
+        'bnumber', <gene_name>, <condition_1>, <condition_2>, ...
+        where condition columns contain protein abundance in mmol/gDCW.
+
+    Returns
+    -------
+    dict
+        Dictionary structure: {condition_name: mapped_dataframe}
+    """
+    logger.info(f"Loading proteomics data from: {proteomics_path}")
+    prot_df = pd.read_csv(proteomics_path)
+
+    # Standardise gene identifier column
+    prot_df = prot_df.rename(columns={prot_df.columns[0]: "gene"})
+    # Drop gene name column (second column)
+    prot_df = prot_df.drop(columns=[prot_df.columns[1]])
+    # Normalise condition column names
+    condition_cols = list(prot_df.columns[1:])
+    prot_df = prot_df.rename(columns={col: davidi_condition_to_id(col) for col in condition_cols})
+
+    logger.debug(f"Proteomics data loaded: {len(prot_df)} genes, {len(prot_df.columns) - 1} conditions")
+
+    enzyme_protein_info_dfs = {}
+
+    logger.info(f"Processing {len(enzyme_info_dfs)} conditions")
+
+    for condition_name, enzyme_df in enzyme_info_dfs.items():
+        try:
+            mapped_df = map_davidi_to_gene(
+                proteomics_df=prot_df,
+                df_enzymes=enzyme_df,
+                condition_col=condition_name,
+            )
+            enzyme_protein_info_dfs[condition_name] = mapped_df
+            logger.debug(
+                f"  {condition_name}: {len(mapped_df)} rows, "
+                f"{mapped_df['protein_mmol_gdcw'].notna().sum()} with protein data"
+            )
         except Exception as e:
             logger.error(f"Error processing {condition_name}: {str(e)}")
             enzyme_protein_info_dfs[condition_name] = None
