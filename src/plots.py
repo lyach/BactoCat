@@ -1,7 +1,6 @@
 """
 plots.py
 
-Purpose: 
 Utility functions for plotting kapp, kmax, kcat in vivo and eta comparisons.
 """
 

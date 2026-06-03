@@ -180,12 +180,10 @@ def create_fluxomics_dataframe(
 
     num_conditions = len(conditions)
     
-    # Create the output dataframe
-    fluxomics_df = pd.DataFrame({'rxn_id': rxn_ids})
-    
-    # Add flux columns for each condition
-    for condition, fluxes in flux_results.items():
-        fluxomics_df[condition] = fluxes
+    fluxomics_df = pd.concat(
+        [pd.DataFrame({'rxn_id': rxn_ids}), pd.DataFrame(flux_results, index=range(len(rxn_ids)))],
+        axis=1,
+    )
     
     logger.info(f"Fluxomics dataframe created with {num_conditions} conditions")
     return fluxomics_df
