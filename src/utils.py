@@ -5,6 +5,7 @@ Purpose:
 Utility functions for the BactoCat pipeline.
 """
 
+import re
 import pandas as pd
 import warnings
 import cobra
@@ -149,6 +150,17 @@ def prepare_amn_dataset(df_pred_path: pd.DataFrame) -> pd.DataFrame:
 # Functions for Davidi dataset preprocessing
 # =============================================================================
 
+def davidi_condition_to_id(condition_name: str) -> str:
+    """
+    Normalise a Davidi-style growth condition IDs.
+    """
+    s = condition_name.lower()
+    s = re.sub(r'[+@=]', '_', s)
+    s = re.sub(r'(?<=\d)\.(?=\d)', '', s)
+    s = re.sub(r'[^a-z0-9]+', '_', s)
+    s = s.strip('_')
+    return s
+
 def prepare_davidi_dataset(growth_conditions_path: str) -> pd.DataFrame:
     """
     Convert Davidi growth conditions CSV into the BactoCat conditions format.
@@ -166,9 +178,7 @@ def prepare_davidi_dataset(growth_conditions_path: str) -> pd.DataFrame:
         growth_rate = float(row['growth rate [h-1]'])
         carbon_source = str(row['media (M9 plus)']).strip().lower()
 
-        prefix = growth_cond[:3].lower()
-        rate_int = round(growth_rate * 100)
-        condition_id = f"{prefix}_{rate_int:03d}"
+        condition_id = davidi_condition_to_id(growth_cond)
 
         new_row = {'condition_id': condition_id, 'avg_growth': growth_rate}
 
@@ -191,15 +201,26 @@ def prepare_davidi_dataset(growth_conditions_path: str) -> pd.DataFrame:
     result_df = result_df[fixed_cols + media_cols]
 
     logger.info(f"Prepared Davidi conditions df with shape {result_df.shape}")
+    
     return result_df
 
 # =============================================================================
 # Functions for specific kcat datasets
 # =============================================================================
 
-def load_kcat_dataset_ecoli(CPIPred_dir, CatPred_dir, EnzyExtract_dir) -> pd.DataFrame:
+def load_kcat_dataset_ecoli(CPIPred_dir: str, 
+                            CatPred_dir: str, 
+                            EnzyExtract_dir: str) -> pd.DataFrame:
     """
     Load in vitro kcat datasets for E. coli.
+    
+    Parameters:
+        CPIPred_dir: Path to the CPIPred CSV file
+        CatPred_dir: Path to the CatPred CSV file
+        EnzyExtract_dir: Path to the EnzyExtract parquet file
+    
+    Returns:
+        pd.DataFrame: DataFrame containing the loaded kcat datasets
     """
     # Load
     CPIPred_df = pd.read_csv(CPIPred_dir)
@@ -223,6 +244,7 @@ def load_kcat_dataset_ecoli(CPIPred_dir, CatPred_dir, EnzyExtract_dir) -> pd.Dat
     EnzyExtract_df = EnzyExtract_df[["sequence", "smiles", "kcat_value"]]
     EnzyExtract_df = EnzyExtract_df.dropna(subset=['kcat_value', 'sequence', 'smiles'])
     EnzyExtract_df.rename(columns={"kcat_value": "kcat_EnzyExtract", "smiles": "SMILES"}, inplace=True)
+
 
     #df_kcat = pd.concat([CPIPred_df, CatPred_df])
         
@@ -389,6 +411,10 @@ def preprocess_in_vitro_dataset(path: str, dataset_name: str) -> pd.DataFrame:
         df = df.dropna(subset=['sequence', 'SMILES', 'kcat_in_vitro'])
         
         return df[['sequence', 'SMILES', 'kcat_in_vitro']]
+    
+    elif dataset_name.upper() == "DAVIDI":
+        # TO DO
+        pass
     
     return df
 
