@@ -16,7 +16,7 @@ changing_proteome: false
 
 
 # ============ OUTPUT FOLDER ============
-folder_id: "davidi_dynamic"
+folder_id: "davidi_static"
 
 
 # ============== PARAMETERS =============

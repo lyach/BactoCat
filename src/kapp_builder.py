@@ -11,8 +11,9 @@ from cobra import flux_analysis
 from cobra.io import read_sbml_model
 from loguru import logger
 from tqdm import tqdm
-from src.FVA_analysis.utils import cobra_to_fva_problem
 
+from src.FVA_analysis.utils import cobra_to_fva_problem
+from src.utils import load_dataframe_if_path
 
 # =============================================================================
 # Constants
@@ -456,24 +457,6 @@ def FVA_integration(fluxomics_df: pd.DataFrame, fva_df: pd.DataFrame, filter: bo
         logger.debug(f"Filtered out {before - after} reactions with violations.")
     filtered_fluxomics_df = merged_df.copy()
     return filtered_fluxomics_df, violations_df
-
-def load_dataframe_if_path(data_input):
-    """
-    Auxiliary function to load dataframe from CSV path or return existing dataframe.
-    
-    Parameters:
-        data_input: str or pd.DataFrame
-            Either a file path to CSV or an existing DataFrame
-    
-    Returns:
-        pd.DataFrame: The loaded or existing DataFrame
-    """
-    if isinstance(data_input, str):
-        return pd.read_csv(data_input)
-    elif isinstance(data_input, pd.DataFrame):
-        return data_input
-    else:
-        raise ValueError("Input must be either a file path (str) or a pandas DataFrame")
 
 
 def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequence_df, run_fva: bool = True):

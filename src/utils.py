@@ -15,8 +15,6 @@ from loguru import logger
 from cobra import flux_analysis
 from rdkit import Chem
 
-from src.kapp_builder import modify_reaction_bounds
-
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 
 
@@ -85,6 +83,8 @@ def get_constrained_growth(model: cobra.Model,
         }
 
         with model:
+            from src.kapp_builder import modify_reaction_bounds
+
             modify_reaction_bounds(model, medium_dict, medium_upper_bound=False, verbose=False)
 
             if method == "FBA":
@@ -481,3 +481,22 @@ def canonicalize(smiles):
         return Chem.MolToSmiles(mol, canonical=True)
     except:
         return None
+    
+    
+def load_dataframe_if_path(data_input):
+    """
+    Auxiliary function to load dataframe from CSV path or return existing dataframe.
+    
+    Parameters:
+        data_input: str or pd.DataFrame
+            Either a file path to CSV or an existing DataFrame
+    
+    Returns:
+        pd.DataFrame: The loaded or existing DataFrame
+    """
+    if isinstance(data_input, str):
+        return pd.read_csv(data_input)
+    elif isinstance(data_input, pd.DataFrame):
+        return data_input
+    else:
+        raise ValueError("Input must be either a file path (str) or a pandas DataFrame")

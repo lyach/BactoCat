@@ -13,7 +13,7 @@ from typing import Tuple, Dict
 import warnings
 from rdkit import Chem
 warnings.filterwarnings('ignore', category=RuntimeWarning)
-
+from src.utils import load_dataframe_if_path
 
 
 # =============================================================================
@@ -21,7 +21,7 @@ warnings.filterwarnings('ignore', category=RuntimeWarning)
 # =============================================================================
 
 def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str, 
-                           log_transform: bool = False,
+                           log_transform: bool = True,
                            hue_col: str = 'subsystem',
                            title="$k_{cat}$ correlation",
                            xlabel="log₁₀($k_{cat}$ $in$ $vitro$) [s⁻¹]",
@@ -65,7 +65,7 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
                     alpha=0.7, edgecolor='k', ax=ax, s=100)
     
     # Rename subsystems
-    df['subsystem'] = df['subsystem'].replace({
+    df[hue_col] = df[hue_col].replace({
         'Purine and Pyrimidine Biosynthesis': 'Nucleotide Biosynthesis',
         'Glycolysis/Gluconeogenesis': 'Glycolysis',
         'Alternate Carbon Metabolism': 'Alternate Carbon',
@@ -77,9 +77,9 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
     })
     
     # Plot regression line
-    # x_line = np.linspace(x.min(), x.max(), 100)
-    # ax.plot(x_line, slope * x_line + intercept, color='red', linestyle='--',
-    #         label=f'y = {slope:.2f}x + {intercept:.2f} (R² = {r_squared:.2f})')
+    x_line = np.linspace(x.min(), x.max(), 100)
+    ax.plot(x_line, slope * x_line + intercept, color='red', linestyle='--',
+            label=f'y = {slope:.2f}x + {intercept:.2f} (R² = {r_squared:.2f})')
 
     bound = [min(x.min(), y.min()), max(x.max(), y.max())]
     ax.plot(bound, bound, color='gray', linestyle=':')
@@ -779,3 +779,17 @@ def group_eta_variability(csv_path, deduplicate=False):
     print(f"Medium variance: {(df['variance_group']=='medium').sum()} enzymes")
     
     return df
+
+# =============================================================================
+# other
+# =============================================================================
+
+def plot_correlation():
+    """
+    Plot correlation between two variables.
+    
+    Parameters:
+    ----------
+    
+    """
+    pass
