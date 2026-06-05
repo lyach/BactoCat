@@ -1,10 +1,10 @@
 """
 Module Description: enzyme_classifier.py
 
-Purpose: A comprehensive toolkit for analyzing and classifying enzyme types from 
+A comprehensive toolkit for analyzing and classifying enzyme types from 
 Gene-Protein-Reaction (GPR) rules in genome-scale metabolic models (GEMs).
 
-Overview: This module processes COBRA metabolic models to extract and classify 
+This module processes COBRA metabolic models to extract and classify 
 enzymes based on their genetic architecture as encoded in GPR rules. It automatically 
 categorizes enzymes into three main types based on their gene organization patterns.
 

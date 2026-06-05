@@ -235,11 +235,11 @@ def run_kapp_pipeline(
     logger.info("=" * 50)
     logger.info("STEP 7: Map proteomics information")
     # Changing proteome (condition-matched)
-    if config.changing_proteome==True:
+    if config.specific_proteome==True:
         enzyme_protein_info_dfs = changing_proteome_mapping(
             enzymes_info_dfs, str(config.proteomics_path)
         )
-    # Static Proteome (PaxDB)
+    # Consensus proteome (PaxDB)
     else:
         enzyme_protein_info_dfs = paxdb_protein_mapping(
             enzymes_info_dfs, str(config.paxdb_path), p_total=config.p_total
@@ -371,8 +371,8 @@ Output:
     else:
         pass
     logger.info(f"Save kapp dataframe: {config.save_kapp}")
-    logger.info(f"Changing proteome: {config.changing_proteome}")
-    if config.changing_proteome==True:
+    logger.info(f"Changing proteome: {config.specific_proteome}")
+    if config.specific_proteome==True:
         logger.info(f"Changing proteome data: {config.proteomics_path.name}")
     else:
         logger.info(f"PaxDB data: {config.paxdb_path.name}")

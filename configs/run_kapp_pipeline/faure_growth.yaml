@@ -12,7 +12,7 @@ run_fva: false
 include_growth: true
 calculate_eta: true
 save_kapp: true
-changing_proteome: false
+specific_proteome: false
 
 
 # ============ OUTPUT FOLDER ============

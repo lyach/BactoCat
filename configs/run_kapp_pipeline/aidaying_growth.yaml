@@ -11,8 +11,8 @@ flux_method: "pFBA"
 run_fva: false
 include_growth: true
 calculate_eta: true
-save_kapp: true
-changing_proteome: false
+save_kapp: true 
+specific_proteome: false
 
 # ============ OUTPUT FOLDER ============
 folder_id: "aidaying_growth"

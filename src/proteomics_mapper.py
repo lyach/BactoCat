@@ -196,9 +196,9 @@ def map_davidi_to_gene(proteomics_df: pd.DataFrame, df_enzymes: pd.DataFrame, co
     return df_enzymes.copy().merge(prot, on="gene", how="left")
 
 
-def changing_proteome_mapping(enzyme_info_dfs: dict, proteomics_path: str) -> dict:
+def specific_proteome_mapping(enzyme_info_dfs: dict, proteomics_path: str) -> dict:
     """
-    Apply proteome mapping (condition-matched) across all enzyme info dataframes.
+    Apply condition-specific proteome mapping across all enzyme info dataframes.
 
     Parameters
     ----------

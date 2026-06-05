@@ -203,19 +203,19 @@ class PipelineConfig(BaseModel):
     # Proteomics
     p_total: Optional[float] = Field(
         default=None,
-        description="Total protein fraction (g protein / g DCW); required when changing_proteome=False"
+        description="Total protein fraction (g protein / g DCW); required when specific_proteome=False"
     )
-    changing_proteome: bool = Field(
+    specific_proteome: bool = Field(
         default=False,
         description="Use condition-matched proteomics instead of static PaxDB data"
     )
     paxdb_path: Optional[Path] = Field(
         default=None,
-        description="Path to PaxDB file (required when changing_proteome=False)"
+        description="Path to PaxDB file (required when specific_proteome=False)"
     )
     proteomics_path: Optional[Path] = Field(
         default=None,
-        description="Path to Davidi-style proteomics CSV (required when changing_proteome=True)"
+        description="Path to Davidi-style proteomics CSV (required when specific_proteome=True)"
     )
     
     # Optional input data
@@ -259,14 +259,14 @@ class PipelineConfig(BaseModel):
     @model_validator(mode='after')
     def validate_proteomics_fields(self):
         """Validate that the correct proteomics fields are provided for the chosen mode."""
-        if self.changing_proteome:
+        if self.specific_proteome:
             if self.proteomics_path is None:
-                raise ValueError("'proteomics_path' must be provided when changing_proteome=True")
+                raise ValueError("'proteomics_path' must be provided when specific_proteome=True")
         else:
             if self.paxdb_path is None:
-                raise ValueError("'paxdb_path' must be provided when changing_proteome=False")
+                raise ValueError("'paxdb_path' must be provided when specific_proteome=False")
             if self.p_total is None:
-                raise ValueError("'p_total' must be provided when changing_proteome=False")
+                raise ValueError("'p_total' must be provided when specific_proteome=False")
         return self
 
     @model_validator(mode='after')
@@ -337,7 +337,7 @@ class PipelineConfig(BaseModel):
             include_growth=self.include_growth,
             free_metabolites=self.free_metabolites,
             p_total=self.p_total,
-            changing_proteome=self.changing_proteome,
+            specific_proteome=self.specific_proteome,
             paxdb_path=resolve(self.paxdb_path),
             proteomics_path=resolve(self.proteomics_path),
             substrate_df=resolve(self.substrate_df),
