@@ -15,6 +15,52 @@ from rdkit import Chem
 warnings.filterwarnings('ignore', category=RuntimeWarning)
 from src.utils import load_dataframe_if_path
 
+# =============================================================================
+# Constants
+# =============================================================================
+
+SUBSYSTEM_RENAME_MAP = {
+    "Central Carbon Metabolism": [
+        "Alternate Carbon Metabolism",
+        "Pentose Phosphate Pathway",
+        "Glycolysis/Gluconeogenesis",
+        "Citric Acid Cycle",
+        "Anaplerotic Reactions"
+    ],
+    "Amino Acid Metabolism": [
+        "Glycine and Serine Metabolism",
+        "Threonine and Lysine Metabolism",
+        "Valine, Leucine, and Isoleucine Metabolism",
+        "Arginine and Proline Metabolism",
+        "Tyrosine, Tryptophan, and Phenylalanine Metabolism",
+        "Cysteine Metabolism",
+        "Histidine Metabolism",
+        "Methionine Metabolism"
+    ],
+    "Nucleotide Metabolism": [
+        "Purine and Pyrimidine Biosynthesis",
+        "Nucleotide Salvage Pathway"
+    ],
+    "Lipid & Cell Envelope": [
+        "Membrane Lipid Metabolism",
+        "Glycerophospholipid Metabolism",
+        "Cell Envelope Biosynthesis",
+        "Lipopolysaccharide Biosynthesis / Recycling"
+    ],
+    "Cofactor, Transport & tRNA": [
+        "Cofactor and Prosthetic Group Biosynthesis",
+        "Folate Metabolism",
+        "Transport, Inner Membrane",
+        "tRNA Charging"
+    ]
+}
+
+
+def _invert_subsystem_rename_map(rename_map: dict) -> dict:
+    """Convert {group: [subsystems]} to {subsystem: group} for Series.replace."""
+    return {old: new for new, olds in rename_map.items() for old in olds}
+
+# TO DO: Give subsystems a consistem color palette
 
 # =============================================================================
 # kmax plotting functions
@@ -23,6 +69,7 @@ from src.utils import load_dataframe_if_path
 def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str, 
                            log_transform: bool = True,
                            hue_col: str = 'subsystem',
+                           subsystem_rename: dict = SUBSYSTEM_RENAME_MAP,
                            title="$k_{cat}$ correlation",
                            xlabel="log₁₀($k_{cat}$ $in$ $vitro$) [s⁻¹]",
                            ylabel="log₁₀($k_{cat}$ $in$ $vivo$) [s⁻¹]",
@@ -41,6 +88,9 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
         Column name containing y values (kcat in vivo)
     hue_col : str
         Column name containing the categories to color by (e.g., 'subsystem')
+    subsystem_rename : dict
+        Dictionary mapping group names to lists of subsystem names
+        (see SUBSYSTEM_RENAME_MAP)
         
     Returns
     -------
@@ -60,21 +110,14 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
 
     fig, ax = plt.subplots(figsize=figsize)
 
-    # Plot datapoints colored by subsystem 
-    sns.scatterplot(data=df, x=x, y=y, hue=hue_col, palette='Set2', 
+    plot_df = df.copy()
+    if subsystem_rename:
+        plot_df[hue_col] = plot_df[hue_col].replace(
+            _invert_subsystem_rename_map(subsystem_rename)
+        )
+
+    sns.scatterplot(data=plot_df, x=x, y=y, hue=hue_col, palette='Set2',
                     alpha=0.7, edgecolor='k', ax=ax, s=100)
-    
-    # Rename subsystems
-    df[hue_col] = df[hue_col].replace({
-        'Purine and Pyrimidine Biosynthesis': 'Nucleotide Biosynthesis',
-        'Glycolysis/Gluconeogenesis': 'Glycolysis',
-        'Alternate Carbon Metabolism': 'Alternate Carbon',
-        'Nucleotide Salvage Pathway': 'Nucleotide Salvage',
-        'Threonine and Lysine Metabolism': 'Thr/Lys Metabolism',
-        'Cofactor and Prosthetic Group Biosynthesis': 'Cofactor Biosynthesis',
-        'Cell Envelope Biosynthesis': 'Cell Envelope',
-        'Tryptophan, Tyrosine, and Phenylalanine Metabolism': 'Aromatic AA Metabolism',
-    })
     
     # Plot regression line
     x_line = np.linspace(x.min(), x.max(), 100)

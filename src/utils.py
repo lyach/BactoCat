@@ -6,10 +6,13 @@ Utility functions for the BactoCat pipeline.
 """
 
 import re
+import numpy as np
 import pandas as pd
 import warnings
 import cobra
 import os
+
+from scipy import stats
 
 from loguru import logger
 from cobra import flux_analysis
@@ -21,6 +24,7 @@ warnings.filterwarnings('ignore', category=RuntimeWarning)
 # =============================================================================
 # Constants
 # =============================================================================
+
 
 M9_MEDIA = {'EX_glc__D_e', 'EX_so4_e', 'EX_o2_e', 'EX_nh4_e', 'EX_pi_e', 'EX_h2o_e',
     'EX_h_e', 'EX_k_e', 'EX_mg2_e', 'EX_na1_e', 'EX_ca2_e', 'EX_cl_e', 'EX_cu2_e', 'EX_fe2_e', 
@@ -42,9 +46,11 @@ CARBON_SOURCE_MAP = {
     'fructose':    'EX_fru_e',
 }
 
+
 # =============================================================================
 # Modeling functions
 # =============================================================================
+
 
 def get_constrained_growth(model: cobra.Model, 
                            medium_df: pd.DataFrame,
@@ -104,9 +110,11 @@ def get_constrained_growth(model: cobra.Model,
 
     return pd.DataFrame(results)
 
+
 # =============================================================================
 # Functions for AMN dataset preprocessing
 # =============================================================================
+
 
 def prepare_amn_dataset(df_pred_path: pd.DataFrame) -> pd.DataFrame:
     """
@@ -149,6 +157,7 @@ def prepare_amn_dataset(df_pred_path: pd.DataFrame) -> pd.DataFrame:
 # =============================================================================
 # Functions for Davidi dataset preprocessing
 # =============================================================================
+
 
 def davidi_condition_to_id(condition_name: str) -> str:
     """
@@ -204,9 +213,11 @@ def prepare_davidi_dataset(growth_conditions_path: str) -> pd.DataFrame:
     
     return result_df
 
+
 # =============================================================================
 # Functions for specific kcat datasets
 # =============================================================================
+
 
 def load_kcat_dataset_ecoli(CPIPred_dir: str, 
                             CatPred_dir: str, 
@@ -383,6 +394,88 @@ def _is_likely_substrate(smiles: str) -> bool:
     # For now, if it passes the above filters, consider it a substrate
     return True
 
+
+# =============================================================================
+# Metrics
+# =============================================================================
+
+def _log_transform(x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    mask = (x > 0) & (y > 0)
+    return np.log10(x[mask]), np.log10(y[mask])
+
+
+def _r2_score(x: np.ndarray, y: np.ndarray, log: bool = False) -> tuple[float, float, int]:
+    if log:
+        x, y = _log_transform(x, y)
+    # R² from linear regression
+    slope, intercept, r_value, _, _ = stats.linregress(x, y)
+    r2 = float(r_value ** 2)
+    return r2, float('nan'), len(x)
+
+
+def _pearson_r(x: np.ndarray, y: np.ndarray, log: bool = False) -> tuple[float, float, int]:
+    if log:
+        x, y = _log_transform(x, y)
+    r, pval = stats.pearsonr(x, y)
+    return float(r), float(pval), len(x)
+
+
+def _spearmans_rho(x: np.ndarray, y: np.ndarray, log: bool = False) -> tuple[float, float, int]:
+    rho, pval = stats.spearmanr(x, y)
+    return float(rho), float(pval), len(x)
+
+
+def _kendall_tau(x: np.ndarray, y: np.ndarray, log: bool = False) -> tuple[float, float, int]:
+    tau, pval = stats.kendalltau(x, y)
+    return float(tau), float(pval), len(x)
+
+
+def _rmsd(x: np.ndarray, y: np.ndarray, log: bool = False) -> tuple[float, float, int]:
+    if log:
+        x, y = _log_transform(x, y)
+    rmsd = float(np.sqrt(np.mean((x - y) ** 2)))
+    return rmsd, float('nan'), len(x)
+
+
+def get_metrics(df: pd.DataFrame, value1: str, value2: str, log: bool = True) -> pd.DataFrame:
+    """
+    Compute comparison metrics between two columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+    value1 : str
+        Column name for the first set of values.
+    value2 : str
+        Column name for the second set of values.
+    log : bool
+        If True, passes log=True to each metric that supports it (R², Pearson r,
+        RMSD). Spearman and Kendall are unaffected by log scaling.
+
+    Returns
+    -------
+    pd.DataFrame with columns: metric, value, p_value, samples
+    """
+    sub = df[[value1, value2]].dropna()
+    x = sub[value1].to_numpy(dtype=float)
+    y = sub[value2].to_numpy(dtype=float)
+
+    _metrics = [
+        ('R²',            _r2_score),
+        ('Pearson r',     _pearson_r),
+        ("Spearman's ρ",  _spearmans_rho),
+        ("Kendall's τ",   _kendall_tau),
+        ('RMSD',          _rmsd),
+    ]
+
+    rows = []
+    for name, func in _metrics:
+        stat, pval, n = func(x, y, log=log)
+        rows.append({'metric': name, 'value': stat, 'p_value': pval, 'samples': n})
+
+    return pd.DataFrame(rows)
+
+
 # =============================================================================
 # ETA analysis
 # =============================================================================
@@ -471,9 +564,11 @@ def get_eta_in_vitro(in_vitro_kcat_path: str, kmax_results: pd.DataFrame, kmax_p
 
     return output_df
 
+
 # =============================================================================
 # Others
 # =============================================================================
+
 
 def canonicalize(smiles):
     try:
