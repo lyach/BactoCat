@@ -1,4 +1,4 @@
-# 🦠 BactoCat 
+# BactoCat 
 
 A computational framework to bridge the gap between *in vitro* and *in vivo* enzyme kinetics. **BactoCat** is an open-source, automated pipeline for computing apparent in vivo turnover numbers ($k_\text{app}$).
 
@@ -75,15 +75,15 @@ Given a genome-scale metabolic model (GEM), experimental conditions (uptake flux
 
 After set-up, you can run the main pipeline  with:
 ```bash
-python scripts/run_kapp_pipeline.py configs/run_kapp_pipeline/ecoli_medium_aidaying.yaml
+python scripts/run_kapp_pipeline.py configs/run_kapp_pipeline/davidi_consensus.yaml
 ```
 
 You can also run a detailed verbose output with `v`:
 ```bash
-python scripts/run_kapp_pipeline.py -v configs/run_kapp_pipeline/ecoli_medium_aidaying.yaml
+python scripts/run_kapp_pipeline.py -v configs/run_kapp_pipeline/davidi_consensus.yaml
 ```
 
-A full documentation of the pipeline parameters, inputs and outputs can be found [here](docs/kapp_pipeline.md).
+A full documentation of the pipeline parameters, inputs and outputs can be found [here](docs/pipeline_specs.md).
 
 
 ## Repository Structure
@@ -128,4 +128,4 @@ A full documentation of the pipeline parameters, inputs and outputs can be found
 
 ## Project Status
 
-**BactoCat** is a project under active development. The current release  implements the pipeline using an example *E. coli* growth dataset (Aida & Ying, 2025) to map environmental conditions to apparent catalytic rates ($k_{app}$).
+**BactoCat** is a project under active development. The current release implements the pipeline using a published dataset of  *E. coli* growth and proteomics across 31 conditions (Schmidt et al; 2016).
