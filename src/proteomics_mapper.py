@@ -1,11 +1,8 @@
 """
 proteomics_mapper.py
 
-Map protein abundances to an enzyme dataframe by gene identifier
-and calculate protein concentrations in mmol/gDCW.
-
-
-
+Module to map protein abundances to an enzyme dataframe by gene 
+identifierand calculate protein concentrations in mmol/gDCW.
 """
 
 import pandas as pd

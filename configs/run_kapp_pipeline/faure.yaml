@@ -1,7 +1,7 @@
 # Configuration file for kapp pipeline
 
 # Homomeric kmax calculation for E. coli (iML1515) using 
-# the AMN predicted medium from Faure et al. 2023
+# the AMN predicted uptake rates from Faure et al. 2023
 
 # ========= MODEL CONFIGURATION =========
 organism: "ecoli"

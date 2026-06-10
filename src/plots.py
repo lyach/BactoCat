@@ -1,7 +1,8 @@
 """
 plots.py
 
-Utility functions for plotting kapp, kmax, kcat in vivo and eta comparisons.
+Module to create visualizations for kapp, kmax, kcat in vivo 
+and eta comparisons.
 """
 
 import pandas as pd

@@ -1,8 +1,8 @@
 """
 BactoCat Kapp Pipeline Runner.
 
-This script runs the kapp pipeline for building enzyme kinetic datasets
-from genome-scale metabolic models.
+This script runs the BactoCat pipeline for building kmax and kapp
+enzyme kinetic datasets from genome-scale metabolic models.
 
 Usage:
     run-kapp-pipeline config.yaml
@@ -26,7 +26,7 @@ from src.config import PipelineConfig, load_config, PROJ_ROOT, ensure_dir_exists
 from src.enzyme_classifier import create_gpr_dataframe, analyze_model_gprs
 from src.gene_sequence_mapper import map_organism_to_uniprot
 from src.substrate_mapper import get_substrate_df
-from src.proteomics_mapper import paxdb_protein_mapping, changing_proteome_mapping
+from src.proteomics_mapper import paxdb_protein_mapping, specific_proteome_mapping
 from src.kapp_builder import (
     create_fluxomics_dataframe,
     create_enzyme_info_dataframe,
@@ -234,9 +234,9 @@ def run_kapp_pipeline(
     # ==== STEP 7: Map proteomics information ====
     logger.info("=" * 50)
     logger.info("STEP 7: Map proteomics information")
-    # Changing proteome (condition-matched)
+    # Specific proteome (condition-matched)
     if config.specific_proteome==True:
-        enzyme_protein_info_dfs = changing_proteome_mapping(
+        enzyme_protein_info_dfs = specific_proteome_mapping(
             enzymes_info_dfs, str(config.proteomics_path)
         )
     # Consensus proteome (PaxDB)
@@ -371,9 +371,9 @@ Output:
     else:
         pass
     logger.info(f"Save kapp dataframe: {config.save_kapp}")
-    logger.info(f"Changing proteome: {config.specific_proteome}")
+    logger.info(f"Specific proteome: {config.specific_proteome}")
     if config.specific_proteome==True:
-        logger.info(f"Changing proteome data: {config.proteomics_path.name}")
+        logger.info(f"Specific proteome data: {config.proteomics_path.name}")
     else:
         logger.info(f"PaxDB data: {config.paxdb_path.name}")
         logger.info(f"Total: {config.p_total}")

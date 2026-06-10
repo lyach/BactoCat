@@ -1,7 +1,7 @@
 # Configuration file for kapp pipeline
 
 # Homomeric kmax calculation for E. coli (iML1515) using 
-# the mapped medium from Aida & Ying 2025
+# the predicted uptake rates from Aida & Ying 2025 (AMN).
 
 # ========= MODEL CONFIGURATION =========
 organism: "ecoli"

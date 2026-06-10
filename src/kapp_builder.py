@@ -1,8 +1,7 @@
 """
 kapp_builder.py
 
-Module with main functions for building the kapp dataframe.
-
+Module with functions to build the kmax and kapp DataFrames.
 """
 
 import cobra

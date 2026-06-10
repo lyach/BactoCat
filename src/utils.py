@@ -1,7 +1,6 @@
 """
 utils.py
 
-Purpose: 
 Utility functions for the BactoCat pipeline.
 """
 

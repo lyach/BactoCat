@@ -1,8 +1,7 @@
 """
 substrate_mapper.py
 
-Purpose: 
-Map substrates to SMILES structures using external databases.
+Module to map substrates to SMILES structures using external databases.
 
 Overview: 
 The following functions in this file are attributed to the kinGEMs
