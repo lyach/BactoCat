@@ -827,12 +827,81 @@ def group_eta_variability(csv_path, deduplicate=False):
 # other
 # =============================================================================
 
-def plot_correlation():
+def plot_metrics_heatmaps(
+    metrics: list[pd.DataFrame],
+    labels: list[tuple[str, str]],
+    metric_names: list[str] | None = None,
+    cmap: str = "YlOrRd",
+    fmt: str = ".2f",
+    figsize: tuple[float, float] | None = None,
+) -> plt.Figure:
     """
-    Plot correlation between two variables.
-    
-    Parameters:
+    Annotated heatmaps for pairwise comparison metrics.
+
+    Arranges one heatmap per metric. Rows/columns are derived from the
+    unique (row_label, col_label) pairs in ``labels``.
+
+    Parameters
     ----------
-    
+    metrics : list[pd.DataFrame]
+        Each element is the output of ``get_metrics()`` (columns: metric, value).
+    labels : list[tuple[str, str]]
+        ``(row_label, col_label)`` for each comparison, same order as ``metrics``.
+        Row labels become y-axis ticks, column labels become x-axis ticks.
+    metric_names : list[str] | None
+        Subset of metrics to display. Defaults to all metrics in the first DataFrame.
+
+    Returns
+    -------
+    matplotlib.figure.Figure
     """
-    pass
+    if len(metrics) != len(labels):
+        raise ValueError("metrics and labels must have the same length")
+
+    row_labels = list(dict.fromkeys(r for r, _ in labels))
+    col_labels = list(dict.fromkeys(c for _, c in labels))
+    label_to_idx = {lbl: i for i, lbl in enumerate(zip(
+        (r for r, _ in labels), (c for _, c in labels)
+    ))}
+
+    if metric_names is None:
+        metric_names = metrics[0]["metric"].tolist()
+
+    n = len(metric_names)
+    if figsize is None:
+        figsize = (3.5 * n, 3.5)
+
+    fig, axes = plt.subplots(1, n, figsize=figsize)
+    if n == 1:
+        axes = [axes]
+
+    for ax, mname in zip(axes, metric_names):
+        mat = np.full((len(row_labels), len(col_labels)), np.nan)
+        for (rl, cl), idx in label_to_idx.items():
+            mdf = metrics[idx]
+            row = mdf.loc[mdf["metric"] == mname, "value"]
+            if not row.empty:
+                ri = row_labels.index(rl)
+                ci = col_labels.index(cl)
+                mat[ri, ci] = row.iloc[0]
+
+        reverse = mname == "RMSD"
+        sns.heatmap(
+            mat,
+            ax=ax,
+            annot=True,
+            fmt=fmt,
+            cmap=cmap + "_r" if reverse else cmap,
+            xticklabels=col_labels,
+            yticklabels=row_labels,
+            vmin=np.nanmin(mat) if not np.all(np.isnan(mat)) else 0,
+            vmax=np.nanmax(mat) if not np.all(np.isnan(mat)) else 1,
+            linewidths=0.5,
+            cbar_kws={"shrink": 0.8},
+        )
+        ax.set_title(mname, fontweight="bold")
+        ax.set_ylabel("")
+        ax.set_xlabel("")
+
+    fig.tight_layout()
+    return fig
