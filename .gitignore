@@ -2,9 +2,12 @@
 __pycache__/
 *.egg-info/
 
-# environment and IDE
+# environment
 .venv/
 uv.lock
+
+# IDEs
+.vscode/
 .cursor/
 
 # project folders

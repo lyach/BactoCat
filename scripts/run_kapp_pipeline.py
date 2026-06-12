@@ -5,15 +5,14 @@ This script runs the BactoCat pipeline for building kmax and kapp
 enzyme kinetic datasets from genome-scale metabolic models.
 
 Usage:
-    run-kapp-pipeline config.yaml
-    python -m scripts.run_kapp_pipeline config.yaml
+    python scripts/run_kapp_pipeline.py configs/run_kapp_pipeline/your_config.yaml
 """
 
 # Command line interface
 import argparse
 import sys
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path 
 import random
 
 # Scientific libraries

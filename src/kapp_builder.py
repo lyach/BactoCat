@@ -583,7 +583,7 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
         df_copy = df_copy[df_copy['gpr_class'] == 'simple']
         
         # Drop duplicate enzymes
-        df_copy = df_copy.drop_duplicates(subset=["gene", "SMILES"])
+        df_copy = df_copy.drop_duplicates(subset=["gene", "SMILES", "rxn"])
 
         # Convert negative fluxes to positive (take absolute value)
         df_copy['flux_value'] = df_copy['flux_value'].abs()
