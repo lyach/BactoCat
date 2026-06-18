@@ -1,0 +1,17 @@
+# Configuration file for the sensitivity analysis
+
+# Sensitivity analysis for the kmax calculation with 
+# different total protein contents.
+# Uses Davidi et al. 2017 growth conditions, with consensus 
+# proteomics (PaxDB).
+
+# Path to the base kapp pipeline configuration
+kapp_config: "configs/run_kapp_pipeline/davidi_consensus.yaml"
+
+# Output folder ID
+folder_id: "davidi_consensus"
+
+# Total protein range (g protein / g DCW)
+p_total_min: 0.26
+p_total_max: 0.31
+p_total_step: 0.01

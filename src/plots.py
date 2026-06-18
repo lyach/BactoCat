@@ -21,47 +21,61 @@ from src.utils import load_dataframe_if_path
 # =============================================================================
 
 SUBSYSTEM_RENAME_MAP = {
-    "Central Carbon Metabolism": [
-        "Alternate Carbon Metabolism",
-        "Pentose Phosphate Pathway",
-        "Glycolysis/Gluconeogenesis",
-        "Citric Acid Cycle",
-        "Anaplerotic Reactions"
-    ],
-    "Amino Acid Metabolism": [
-        "Glycine and Serine Metabolism",
-        "Threonine and Lysine Metabolism",
-        "Valine, Leucine, and Isoleucine Metabolism",
-        "Arginine and Proline Metabolism",
-        "Tyrosine, Tryptophan, and Phenylalanine Metabolism",
-        "Cysteine Metabolism",
-        "Histidine Metabolism",
-        "Methionine Metabolism"
-    ],
-    "Nucleotide Metabolism": [
-        "Purine and Pyrimidine Biosynthesis",
-        "Nucleotide Salvage Pathway"
-    ],
-    "Lipid & Cell Envelope": [
-        "Membrane Lipid Metabolism",
-        "Glycerophospholipid Metabolism",
-        "Cell Envelope Biosynthesis",
-        "Lipopolysaccharide Biosynthesis / Recycling"
-    ],
-    "Cofactor, Transport & tRNA": [
-        "Cofactor and Prosthetic Group Biosynthesis",
-        "Folate Metabolism",
-        "Transport, Inner Membrane",
-        "tRNA Charging"
-    ]
+  # Central Carbon Metabolism
+    "Alternate Carbon Metabolism": "Central Carbon Metabolism",
+    "Pentose Phosphate Pathway": "Central Carbon Metabolism",
+    "Glycolysis/Gluconeogenesis": "Central Carbon Metabolism",
+    "Citric Acid Cycle": "Central Carbon Metabolism",
+    "Anaplerotic Reactions": "Central Carbon Metabolism",
+  
+  # Amino Acid Metabolism
+    "Glycine and Serine Metabolism": "Amino Acid Metabolism",
+    "Threonine and Lysine Metabolism": "Amino Acid Metabolism",
+    "Valine, Leucine, and Isoleucine Metabolism": "Amino Acid Metabolism",
+    "Arginine and Proline Metabolism": "Amino Acid Metabolism",
+    "Tyrosine, Tryptophan, and Phenylalanine Metabolism": "Amino Acid Metabolism",
+    "Cysteine Metabolism": "Amino Acid Metabolism",
+    "Histidine Metabolism": "Amino Acid Metabolism",
+    "Methionine Metabolism": "Amino Acid Metabolism",
+  
+  # Nucleotide Metabolism
+    "Purine and Pyrimidine Biosynthesis": "Nucleotide Metabolism",
+    "Nucleotide Salvage Pathway": "Nucleotide Metabolism",
+  
+  # Lipid & Cell Envelope
+    "Membrane Lipid Metabolism": "Lipid & Cell Envelope",
+    "Glycerophospholipid Metabolism": "Lipid & Cell Envelope",
+    "Cell Envelope Biosynthesis": "Lipid & Cell Envelope",
+    "Lipopolysaccharide Biosynthesis / Recycling": "Lipid & Cell Envelope",
+  
+  # Cofactor, Transport & tRNA
+    "Cofactor and Prosthetic Group Biosynthesis": "Cofactor, Transport & tRNA",
+    "Folate Metabolism": "Cofactor, Transport & tRNA",
+    "Transport, Inner Membrane": "Cofactor, Transport & tRNA",
+    "tRNA Charging": "Cofactor, Transport & tRNA",
+}
+
+SUBSYSTEM_COLOR_MAP = {
+    "Central Carbon Metabolism": "#66c2a5",
+    "Amino Acid Metabolism": "#fc8d62",
+    "Nucleotide Metabolism": "#8da0cb",
+    "Lipid & Cell Envelope": "#e78ac3",
+    "Cofactor, Transport & tRNA": "#a6d854",
 }
 
 
-def _invert_subsystem_rename_map(rename_map: dict) -> dict:
-    """Convert {group: [subsystems]} to {subsystem: group} for Series.replace."""
-    return {old: new for new, olds in rename_map.items() for old in olds}
-
-# TO DO: Give subsystems a consistem color palette
+def _subsystem_color(
+    category: str,
+    rename_map: dict | None,
+    color_map: dict,
+    fallback: str = "#b3b3b3",
+) -> str:
+    """Resolve a hue category to a color via group label or rename map."""
+    if category in color_map:
+        return color_map[category]
+    if rename_map and category in rename_map:
+        return color_map.get(rename_map[category], fallback)
+    return fallback
 
 # =============================================================================
 # kmax plotting functions
@@ -71,6 +85,7 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
                            log_transform: bool = True,
                            hue_col: str = 'subsystem',
                            subsystem_rename: dict = SUBSYSTEM_RENAME_MAP,
+                           subsystem_colors: dict | None = SUBSYSTEM_COLOR_MAP,
                            title="$k_{cat}$ correlation",
                            xlabel="log₁₀($k_{cat}$ $in$ $vitro$) [s⁻¹]",
                            ylabel="log₁₀($k_{cat}$ $in$ $vivo$) [s⁻¹]",
@@ -90,8 +105,10 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
     hue_col : str
         Column name containing the categories to color by (e.g., 'subsystem')
     subsystem_rename : dict
-        Dictionary mapping group names to lists of subsystem names
-        (see SUBSYSTEM_RENAME_MAP)
+        Mapping from subsystem name to grouped label (see SUBSYSTEM_RENAME_MAP)
+    subsystem_colors : dict, optional
+        Mapping from grouped subsystem label to color (see SUBSYSTEM_COLOR_MAP).
+        Pass None to use seaborn's default palette.
         
     Returns
     -------
@@ -113,11 +130,17 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
 
     plot_df = df.copy()
     if subsystem_rename:
-        plot_df[hue_col] = plot_df[hue_col].replace(
-            _invert_subsystem_rename_map(subsystem_rename)
-        )
+        plot_df[hue_col] = plot_df[hue_col].replace(subsystem_rename)
 
-    sns.scatterplot(data=plot_df, x=x, y=y, hue=hue_col, palette='Set2',
+    palette = None
+    if subsystem_colors:
+        categories = plot_df[hue_col].dropna().unique()
+        palette = {
+            cat: _subsystem_color(cat, subsystem_rename, subsystem_colors)
+            for cat in categories
+        }
+
+    sns.scatterplot(data=plot_df, x=x, y=y, hue=hue_col, palette=palette or 'Set2',
                     alpha=0.7, edgecolor='k', ax=ax, s=100)
     
     # Plot regression line
@@ -127,6 +150,8 @@ def plot_scatter_kcat_kmax(df: pd.DataFrame, x_col: str, y_col: str,
 
     bound = [min(x.min(), y.min()), max(x.max(), y.max())]
     ax.plot(bound, bound, color='gray', linestyle=':')
+
+    ax.plot([], [], ' ', label=f'n = {len(df)}')
 
     ax.set_title(title, fontsize=15, fontweight='bold')
     ax.set_xlabel(xlabel, fontsize=15)
@@ -906,3 +931,108 @@ def plot_metrics_heatmaps(
 
     fig.tight_layout()
     return fig
+
+# =============================================================================
+# sensitivity analysis
+# =============================================================================
+def plot_p_total_sweep(df: pd.DataFrame, dgene: str, substrate: str, rxn: str):
+    """
+    Line graph of kmax vs assumed total protein content for a single enzyme.
+
+    X-axis is the assumed total protein content (extracted from column names
+    matching ``kcat_app_max_*``), Y-axis is the calculated apparent kcat on a
+    log-10 scale.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Sensitivity results (``kmax_sensitivity.csv``) with identifier
+        columns and one ``kcat_app_max_{p}`` column per p_total value.
+    dgene : str
+        Gene identifier to select.
+    substrate : str
+        SMILES string identifying the substrate.
+    rxn : str
+        Reaction ID.
+    """
+    mask = (df["gene"] == dgene) & (df["SMILES"] == substrate) & (df["rxn"] == rxn)
+    row = df.loc[mask]
+    if row.empty:
+        raise ValueError(
+            f"No entry found for gene={dgene}, SMILES={substrate}, rxn={rxn}"
+        )
+    row = row.iloc[0]
+
+    kmax_cols = sorted(
+        [c for c in df.columns if c.startswith("kcat_app_max_")],
+        key=lambda c: float(c.replace("kcat_app_max_", "")),
+    )
+    p_totals = [float(c.replace("kcat_app_max_", "")) for c in kmax_cols]
+    values = [row[c] for c in kmax_cols]
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(p_totals, values, "o-", color="steelblue", linewidth=2, markersize=8)
+    ax.set_yscale("log")
+    ax.set_xlabel("Total protein content (g/gDCW)", fontsize=12)
+    ax.set_ylabel("$k_{cat}^{app,max}$ (s⁻¹)", fontsize=12)
+    ax.set_title(f"{dgene} | {rxn}", fontsize=13, fontweight="bold")
+    ax.tick_params(axis="both", which="major", labelsize=11)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_p_total_distribution(
+    df: pd.DataFrame, kmax_list: list[str] | None = None
+):
+    """
+    Overlayed histograms of kmax distributions at different p_total values.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Sensitivity results (``kmax_sensitivity.csv``).
+    kmax_list : list[str] or None
+        Column names to plot (e.g.
+        ``['kcat_app_max_0.26', 'kcat_app_max_0.31']``).
+        If *None*, all ``kcat_app_max_*`` columns are plotted.
+    """
+    if kmax_list is None:
+        kmax_list = sorted(
+            [c for c in df.columns if c.startswith("kcat_app_max_")],
+            key=lambda c: float(c.replace("kcat_app_max_", "")),
+        )
+    if not kmax_list:
+        raise ValueError("No kcat_app_max columns found in the DataFrame")
+
+    colors = sns.color_palette("viridis", n_colors=len(kmax_list))
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for col, color in zip(kmax_list, colors):
+        vals = df[col].dropna()
+        vals = vals[vals > 0]
+        log_vals = np.log10(vals)
+        p_label = col.replace("kcat_app_max_", "p=")
+        ax.hist(
+            log_vals,
+            bins=30,
+            alpha=0.45,
+            color=color,
+            edgecolor="black",
+            linewidth=0.5,
+            density=True,
+            label=f"{p_label} (n={len(vals):,})",
+        )
+
+    ax.set_xlabel("log₁₀($k_{cat}^{app,max}$) [s⁻¹]", fontsize=12)
+    ax.set_ylabel("Density", fontsize=12)
+    ax.set_title(
+        "$k_{max}$ distribution across protein contents",
+        fontsize=13,
+        fontweight="bold",
+    )
+    ax.tick_params(axis="both", which="major", labelsize=11)
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
