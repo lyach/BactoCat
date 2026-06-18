@@ -935,48 +935,86 @@ def plot_metrics_heatmaps(
 # =============================================================================
 # sensitivity analysis
 # =============================================================================
-def plot_p_total_sweep(df: pd.DataFrame, dgene: str, substrate: str, rxn: str):
+def plot_p_total_sweep(
+    df: pd.DataFrame,
+    enzymes: list[tuple[str, str, str]],
+    log_scale: bool = False,
+):
     """
-    Line graph of kmax vs assumed total protein content for a single enzyme.
+    Line graph of kmax vs assumed total protein content for one or more enzymes.
 
     X-axis is the assumed total protein content (extracted from column names
-    matching ``kcat_app_max_*``), Y-axis is the calculated apparent kcat on a
-    log-10 scale.
+    matching ``kcat_app_max_*``). Y-axis is the calculated apparent kcat, or
+  its log10 transform when ``log_scale=True``.
 
     Parameters
     ----------
     df : pd.DataFrame
         Sensitivity results (``kmax_sensitivity.csv``) with identifier
         columns and one ``kcat_app_max_{p}`` column per p_total value.
-    dgene : str
-        Gene identifier to select.
-    substrate : str
-        SMILES string identifying the substrate.
-    rxn : str
-        Reaction ID.
+    enzymes : list[tuple[str, str, str]]
+        Enzymes to plot, each as ``(dgene, substrate, rxn)`` where
+        ``substrate`` is the SMILES string.
+    log_scale : bool, default False
+        If True, plot log10(kcat) on a linear y-axis; otherwise plot raw
+        kcat values.
     """
-    mask = (df["gene"] == dgene) & (df["SMILES"] == substrate) & (df["rxn"] == rxn)
-    row = df.loc[mask]
-    if row.empty:
-        raise ValueError(
-            f"No entry found for gene={dgene}, SMILES={substrate}, rxn={rxn}"
-        )
-    row = row.iloc[0]
+    if not enzymes:
+        raise ValueError("enzymes must contain at least one (dgene, substrate, rxn) tuple")
 
     kmax_cols = sorted(
         [c for c in df.columns if c.startswith("kcat_app_max_")],
         key=lambda c: float(c.replace("kcat_app_max_", "")),
     )
+    if not kmax_cols:
+        raise ValueError("No kcat_app_max columns found in the DataFrame")
+
     p_totals = [float(c.replace("kcat_app_max_", "")) for c in kmax_cols]
-    values = [row[c] for c in kmax_cols]
+    colors = sns.color_palette("tab10", n_colors=len(enzymes))
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(p_totals, values, "o-", color="steelblue", linewidth=2, markersize=8)
-    ax.set_yscale("log")
+
+    for (dgene, substrate, rxn), color in zip(enzymes, colors):
+        mask = (df["gene"] == dgene) & (df["SMILES"] == substrate) & (df["rxn"] == rxn)
+        row = df.loc[mask]
+        if row.empty:
+            raise ValueError(
+                f"No entry found for gene={dgene}, SMILES={substrate}, rxn={rxn}"
+            )
+        row = row.iloc[0]
+        values = np.array([row[c] for c in kmax_cols], dtype=float)
+
+        if log_scale:
+            if np.any(values <= 0):
+                raise ValueError(
+                    f"Cannot apply log scale for gene={dgene}, rxn={rxn}: "
+                    "non-positive kcat values found"
+                )
+            values = np.log10(values)
+
+        label = f"{dgene} | {rxn}"
+        ax.plot(
+            p_totals,
+            values,
+            "o-",
+            color=color,
+            linewidth=2,
+            markersize=8,
+            label=label,
+        )
+
     ax.set_xlabel("Total protein content (g/gDCW)", fontsize=12)
-    ax.set_ylabel("$k_{cat}^{app,max}$ (s⁻¹)", fontsize=12)
-    ax.set_title(f"{dgene} | {rxn}", fontsize=13, fontweight="bold")
+    if log_scale:
+        ax.set_ylabel("log₁₀($k_{cat}^{app,max}$) [s⁻¹]", fontsize=12)
+    else:
+        ax.set_ylabel("$k_{cat}^{app,max}$ (s⁻¹)", fontsize=12)
+    ax.set_title(
+        "Total protein content sweep across enzymes",
+        fontsize=13,
+        fontweight="bold",
+    )
     ax.tick_params(axis="both", which="major", labelsize=11)
+    ax.legend()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
