@@ -21,7 +21,7 @@ folder_id: "davidi_consensus"
 
 
 # ============== PARAMETERS =============
-p_total: 0.55            # Total protein fraction (g protein / g DCW)
+p_total: 0.31            # Total protein fraction (g protein / g DCW)
 upper_threshold: 1.0e6   # Upper limit for kcat_app (s⁻¹)
 lower_threshold: 1.0e-5  # Lower limit for kcat_app (s⁻¹)
 
