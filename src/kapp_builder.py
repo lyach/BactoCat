@@ -757,7 +757,7 @@ def get_kmax_homomeric(kapp_results: dict):
             Dictionary with structure {condition: dataframe}
     Returns:
         kmax_results: pd.DataFrame
-            DataFrame with columns: ['sequence', 'SMILES', 'kcat_app_max', 'condition_max']
+            DataFrame with columns: ['sequence', 'SMILES', 'Direction', 'kcat_app_max', 'condition_max', ...]
             containing the maximum kcat_app value for each enzyme-substrate pair
     """
     logger.info("Starting kmax analysis across all conditions...")
@@ -796,7 +796,7 @@ def get_kmax_homomeric(kapp_results: dict):
     
     # Select and rename relevant columns for output
     output_columns = [
-        'sequence', 'SMILES', 'kcat_app', 'source_condition',
+        'sequence', 'SMILES', 'Direction', 'kcat_app', 'source_condition',
         'gene', 'rxn', 'flux_value', 'FVA_upper', 'FVA_lower', 'protein_mmol_gdcw', 'subsystem' 
     ]
     
