@@ -80,6 +80,15 @@ Pre-computed data can be provided to skip auto-generation:
 | `upper_threshold` | float | `1.0e6` | Maximum k<sub>app</sub> (s⁻¹) |
 | `lower_threshold` | float | `1.0e-5` | Minimum k<sub>app</sub> (s⁻¹) |
 
+### Enzyme Classes
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `enzyme_classes` | list[str] | `["homomeric"]` | Enzyme classes to compute k<sub>app</sub>/k<sub>max</sub> for. Any subset of `homomeric`, `isoenzyme`, `complex`, `mixed`. |
+
+- `homomeric`: single-gene enzymes; k<sub>app</sub> = (flux/3600) / abundance (s⁻¹).
+- `isoenzyme` / `complex` / `mixed`: computed with the Davidi mass-fraction / specific-activity method (assuming active sites = 1 and subunit stoichiometry = 1). `mixed` covers isozymes that are themselves complexes. See [`computation.md`](computation.md) for the equations, assumptions, and missing-data policy.
+
 ### Output Options
 
 | Parameter | Type | Default | Description |
@@ -105,10 +114,16 @@ results/run_kapp_pipeline/{organism}_{folder_id}/
 
 ### `kmax.csv`
 
-Contains, for each enzyme:
-- k<sub>max</sub> value (maximum k<sub>app</sub> across conditions)
-- Metadata: genes, reactions, subsystems, protein sequences, substrate SMILES
+Contains, for each enzyme (homomeric protein or integrated isoenzyme/complex):
+- `kcat_app_max` — k<sub>max</sub>, the maximum turnover k<sub>app</sub> (s⁻¹) across conditions, with `condition_max`
+- `SA_app_max` — maximum specific activity (µmol·mg⁻¹·min⁻¹) across conditions
+- `enzyme_class` (`homomeric`, `isoenzyme`, `complex`, `mixed`), `enzyme_key` (grouping identity)
+- `mass_fraction` (mg/gDCW) and `MW_total` (g/mol) used in the denominator
+- `n_components` (genes in the GPR) and `n_contributing` (genes summed after the missing-data policy)
+- Metadata: `genes`, `sequence`/`sequences`, `rxn`, `subsystem`, substrate `SMILES`, `Direction`
 - η statistics (mean, variance, coefficient of variation) if `calculate_eta=true`
+
+For homomeric enzymes `SA_app_max` corresponds to the same condition as k<sub>max</sub>; for grouped enzymes whose contributing subunit set varies across conditions the two maxima may come from different conditions.
 
 
 ## Pipeline Steps
@@ -116,14 +131,14 @@ Contains, for each enzyme:
 ```
 Model setup (solver + SBML load)
 │
-├── STEP 1  — Extract GPR rules: classify enzymes (homomeric, complex, isoenzyme)
+├── STEP 1  — Extract GPR rules: DNF-parse and classify enzymes (homomeric, complex, isoenzyme, mixed)
 ├── STEP 2  — Run FBA/pFBA flux simulations across all conditions
 ├── STEP 3  — [Optional] Run FVA and filter infeasible fluxes
 ├── STEP 4  — Load protein sequences (from file or UniProt API)
 ├── STEP 5  — Load substrate information (from file or model extraction)
-├── STEP 6  — Merge enzyme, flux, substrate, and sequence data
+├── STEP 6  — Merge enzyme, flux, substrate, sequence data; compute molecular weights
 ├── STEP 7  — Map proteomics (PaxDB consensus or condition-matched)
-├── STEP 8  — Calculate k<sub>app</sub> for homomeric enzymes
+├── STEP 8  — Calculate k<sub>app</sub> for the requested `enzyme_classes` (homomeric turnover; isoenzyme/complex/mixed via mass-fraction SA + s⁻¹)
 ├── STEP 9  — Filter k<sub>app</sub> values outside physical thresholds
 ├── STEP 10 — Determine k<sub>max</sub> (maximum k<sub>app</sub> per enzyme across conditions)
 ├── STEP 11 — [Optional] Calculate η = k<sub>app</sub> / k<sub>max</sub> per condition

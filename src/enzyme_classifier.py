@@ -15,9 +15,12 @@ categorizes enzymes into three main types based on their gene organization patte
 """
 
 
+import ast
 import pandas as pd
 import cobra
-import re
+
+from cobra.core.gene import GPR
+from itertools import product
 
 
 def classify_gpr_type(gpr_rule):
@@ -37,6 +40,126 @@ def classify_gpr_type(gpr_rule):
         return 'complex'
 
 
+def _ast_to_dnf(node):
+    """
+    Recursively expand a GPR abstract-syntax-tree node into disjunctive normal
+    form (DNF), i.e. an OR of AND-groups.
+
+    Parameters
+    ----------
+    node : ast.AST
+        A node from ``cobra.core.gene.GPR.body`` (``ast.Name`` for a single
+        gene or ``ast.BoolOp`` for AND/OR combinations).
+
+    Returns
+    -------
+    list[frozenset[str]]
+        Each frozenset is one OR-branch containing the gene IDs joined by AND.
+    """
+    if node is None:
+        return []
+    if isinstance(node, ast.Name):
+        return [frozenset({node.id})]
+    if isinstance(node, ast.BoolOp):
+        children = [_ast_to_dnf(value) for value in node.values]
+        if isinstance(node.op, ast.Or):
+            # OR: concatenate the branches of every child
+            branches = []
+            for child in children:
+                branches.extend(child)
+            return branches
+        # AND: cartesian product, unioning one branch from each child
+        return [frozenset().union(*combo) for combo in product(*children)]
+    raise ValueError(f"Unsupported GPR AST node: {type(node).__name__}")
+
+
+def gpr_to_dnf(gpr):
+    """
+    Convert a GPR rule into disjunctive normal form (an OR of AND-groups).
+
+    Each AND-group represents one alternative enzyme (a single gene for a
+    homomeric/isozyme alternative, or several genes for a complex). The list of
+    groups represents the isozyme alternatives for the reaction.
+
+    Parameters
+    ----------
+    gpr : cobra.Reaction, cobra.core.gene.GPR, or str
+        A reaction, a GPR object, or a GPR rule string.
+
+    Returns
+    -------
+    list[frozenset[str]]
+        DNF representation. Empty list when the GPR is empty.
+
+    Examples
+    --------
+    ``(b1 and b2) or b3`` -> ``[{b1, b2}, {b3}]``
+    """
+    # Resolve to a GPR object
+    if isinstance(gpr, cobra.Reaction):
+        gpr_obj = gpr.gpr
+    elif isinstance(gpr, GPR):
+        gpr_obj = gpr
+    elif isinstance(gpr, str):
+        rule = gpr.strip()
+        if not rule or rule.lower() == 'none':
+            return []
+        gpr_obj = GPR.from_string(rule)
+    else:
+        raise TypeError(f"Unsupported GPR input type: {type(gpr).__name__}")
+
+    body = getattr(gpr_obj, 'body', None)
+    return _ast_to_dnf(body)
+
+
+def classify_enzyme_from_dnf(dnf):
+    """
+    Assign a reaction-level enzyme class from a DNF representation.
+
+    Parameters
+    ----------
+    dnf : list[frozenset[str]]
+        DNF as returned by :func:`gpr_to_dnf`.
+
+    Returns
+    -------
+    str
+        One of ``'homomeric'``, ``'isoenzyme'``, ``'complex'``, ``'mixed'`` or
+        ``'none'`` (empty GPR).
+
+        - homomeric : a single gene catalyses the reaction.
+        - complex   : a single AND-group of multiple genes (one heteromer).
+        - isoenzyme : several OR alternatives, each a single gene.
+        - mixed     : several OR alternatives where at least one is a complex
+                      (i.e. isozymes that are themselves heteromers).
+    """
+    if not dnf:
+        return 'none'
+    n_branches = len(dnf)
+    max_branch_size = max(len(branch) for branch in dnf)
+    all_genes = frozenset().union(*dnf)
+    if len(all_genes) == 1:
+        return 'homomeric'
+    if n_branches == 1:
+        # single AND-group with >1 gene
+        return 'complex'
+    if max_branch_size == 1:
+        # several single-gene alternatives
+        return 'isoenzyme'
+    return 'mixed'
+
+
+def build_enzyme_id(rxn_id, all_genes):
+    """
+    Build a stable identifier for the integrated enzyme of a reaction.
+
+    For all enzyme classes the integrated enzyme is keyed by the reaction and
+    its sorted gene set, so every gene row of a given reaction shares one id.
+    """
+    genes_token = '_'.join(sorted(str(g) for g in all_genes))
+    return f"{rxn_id}__{genes_token}"
+
+
 def create_gpr_dataframe(model):
     """
     Create a dataframe that represents gene-protein-reaction rules from a COBRA model
@@ -45,8 +168,17 @@ def create_gpr_dataframe(model):
         model (cobra.Model): COBRA genome-scale metabolic model
     
     Returns:
-        pd.DataFrame: DataFrame with columns 
-        ['gene', 'type', 'rxn', 'subunit', 'GPR', 'enzyme_ID', 'gpr_class']
+        pd.DataFrame: DataFrame with columns
+        ['gene', 'type', 'rxn', 'subsystem', 'subunit', 'GPR', 'enzyme_ID',
+         'gpr_class', 'enzyme_class', 'enzyme_id', 'n_components']
+
+        - ``gpr_class`` : raw GPR structure ('simple', 'or_only', 'and_only',
+          'complex').
+        - ``enzyme_class`` : reaction-level biological class ('homomeric',
+          'isoenzyme', 'complex', 'mixed') derived from the GPR DNF.
+        - ``enzyme_id`` : stable identifier shared by all gene rows of the same
+          integrated enzyme (reaction + sorted gene set).
+        - ``n_components`` : number of distinct genes in the integrated enzyme.
     """
     
     rows = []
@@ -67,12 +199,18 @@ def create_gpr_dataframe(model):
         
         # Classify GPR type for this reaction
         gpr_class = classify_gpr_type(gpr_rule)
+
+        # Robustly decompose the GPR into isozyme alternatives (OR of AND-groups)
+        dnf = gpr_to_dnf(reaction.gpr)
+        enzyme_class = classify_enzyme_from_dnf(dnf)
+        all_genes = sorted(frozenset().union(*dnf)) if dnf else sorted(genes_in_rule)
+        enzyme_id = build_enzyme_id(reaction.id, all_genes)
         
         # Process each gene in the GPR rule
         for gene in genes_in_rule:
-            # Determine enzyme type based on GPR complexity
-            enzyme_type, subunits, enzyme_id = determine_enzyme_properties(
-                gene, gpr_rule, reaction.id, genes_in_rule
+            # Determine per-gene enzyme type and the subunits it is bound to
+            enzyme_type, subunits, legacy_id = determine_enzyme_properties(
+                gene, dnf, reaction.id, all_genes
             )
             row = {
                 'gene': gene,
@@ -81,99 +219,60 @@ def create_gpr_dataframe(model):
                 'subsystem': reaction.subsystem,
                 'subunit': subunits if subunits else '-',
                 'GPR': gpr_rule,
-                'enzyme_ID': enzyme_id,
+                'enzyme_ID': legacy_id,
                 'gpr_class': gpr_class,
+                'enzyme_class': enzyme_class,
+                'enzyme_id': enzyme_id,
+                'n_components': len(all_genes),
             }
             rows.append(row)
     
     return pd.DataFrame(rows)
 
 
-def determine_enzyme_properties(gene, gpr_rule, rxn_id, all_genes):
+def determine_enzyme_properties(gene, dnf, rxn_id, all_genes):
     """
-    Determine enzyme type, subunits, and enzyme ID based on GPR rule
-    
-    Parameters:
-        gene (str): Current gene ID
-        gpr_rule (str): GPR rule string
-        rxn_id (str): Reaction ID
-        all_genes (list): All genes in the GPR rule
+    Determine the per-gene enzyme type, its complex partners, and a legacy
+    enzyme ID, using the DNF decomposition of the GPR.
+
+    Parameters
+    ----------
+    gene : str
+        Current gene ID.
+    dnf : list[frozenset[str]]
+        DNF of the reaction GPR (OR of AND-groups), from :func:`gpr_to_dnf`.
+    rxn_id : str
+        Reaction ID.
+    all_genes : list[str]
+        All genes in the GPR rule.
+
+    Returns
+    -------
+    tuple(str, str | None, str)
+        (enzyme_type, subunits, legacy_enzyme_id)
     """
-    
-    # Clean the GPR rule for analysis
-    gpr_clean = gpr_rule.replace(' ', '').lower()
-    gene_clean = gene.lower()
-    
     # Single gene reaction (homomeric enzyme)
     if len(all_genes) == 1:
         return 'homomeric', None, f"{gene}_h_{rxn_id}"
-    
-    # Multiple genes - check for AND/OR relationships
-    has_and = 'and' in gpr_clean
-    has_or = 'or' in gpr_clean
-    
-    if has_and and has_or:
-        # Complex case with both AND and OR
-        # Check if this gene is part of a complex (connected by AND)
-        if is_gene_in_complex(gene, gpr_rule):
-            complex_partners = get_complex_partners(gene, gpr_rule, all_genes)
-            subunits = ','.join(sorted(complex_partners))
-            complex_genes = ''.join(sorted(complex_partners))
-            return 'complex', subunits, f"{complex_genes}_c_{rxn_id}"
-        else:
-            # This gene is an isoenzyme alternative
-            return 'isoenzyme', None, f"{gene}_i_{rxn_id}"
-    
-    elif has_and and not has_or:
-        # Pure complex (all genes required)
-        subunits = ','.join(sorted(all_genes))
-        complex_genes = ''.join(sorted(all_genes))
+
+    # Branches of the DNF that contain this gene
+    gene_branches = [branch for branch in dnf if gene in branch]
+
+    # Genes that this gene is bound to via AND (across every branch it appears in)
+    complex_partners = set()
+    in_complex = False
+    for branch in gene_branches:
+        if len(branch) > 1:
+            in_complex = True
+            complex_partners.update(branch)
+
+    if in_complex:
+        subunits = ','.join(sorted(complex_partners))
+        complex_genes = ''.join(sorted(complex_partners))
         return 'complex', subunits, f"{complex_genes}_c_{rxn_id}"
-    
-    elif has_or and not has_and:
-        # Pure isoenzymes (alternative genes)
-        return 'isoenzyme', None, f"{gene}_i_{rxn_id}"
-    
-    else:
-        # Fallback case
-        return 'isoenzyme', None, f"{gene}_i_{rxn_id}"
 
-
-def is_gene_in_complex(gene, gpr_rule):
-    """
-    Check if a gene is part of a protein complex (connected by AND)
-    """
-    
-    # Simple heuristic: if gene appears near an AND, it's likely in a complex
-    gpr_parts = re.split(r'\s+or\s+', gpr_rule.lower())
-    
-    for part in gpr_parts:
-        if gene.lower() in part and 'and' in part:
-            return True
-    return False
-
-
-def get_complex_partners(gene, gpr_rule, all_genes):
-    """
-    Get the genes that form a complex with the given gene
-    """
-    
-    # Find the part of GPR rule containing this gene and connected by AND
-    gpr_parts = re.split(r'\s+or\s+', gpr_rule.lower())
-    gene_lower = gene.lower()
-    
-    for part in gpr_parts:
-        if gene_lower in part and 'and' in part:
-            # Extract genes from this part
-            genes_in_part = []
-            for g in all_genes:
-                if g.lower() in part:
-                    genes_in_part.append(g)
-            if len(genes_in_part) > 1:
-                return genes_in_part
-    
-    # Fallback: return all genes if complex structure unclear
-    return all_genes
+    # Gene only ever appears as a stand-alone OR alternative -> isoenzyme
+    return 'isoenzyme', None, f"{gene}_i_{rxn_id}"
 
 
 def analyze_model_gprs(model):

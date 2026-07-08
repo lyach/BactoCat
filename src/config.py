@@ -245,6 +245,30 @@ class PipelineConfig(BaseModel):
         default=False,
         description="Whether to save the collated kapp dataframe as a parquet file"
     )
+
+    # Enzyme classes to include in the kapp/kmax calculation.
+    enzyme_classes: list[Literal["homomeric", "isoenzyme", "complex", "mixed"]] = Field(
+        default_factory=lambda: ["homomeric"],
+        description=(
+            "Enzyme classes to compute kapp/kmax for. Subset of "
+            "['homomeric', 'isoenzyme', 'complex', 'mixed']. Isoenzymes, "
+            "complexes and mixed (isozymes-of-complexes) use the Davidi "
+            "mass-fraction / specific-activity method."
+        ),
+    )
+
+    @field_validator('enzyme_classes', mode='after')
+    @classmethod
+    def validate_enzyme_classes(cls, v):
+        """Ensure at least one enzyme class is requested and entries are unique."""
+        if not v:
+            raise ValueError("'enzyme_classes' must contain at least one class.")
+        # Preserve order while de-duplicating
+        seen = []
+        for item in v:
+            if item not in seen:
+                seen.append(item)
+        return seen
     
     @field_validator('model_path', 'paxdb_path', 'proteomics_path', 'substrate_df', 'sequence_df', 'medium_df', mode='before')
     @classmethod
@@ -346,6 +370,7 @@ class PipelineConfig(BaseModel):
             lower_threshold=self.lower_threshold,
             calculate_eta=self.calculate_eta,
             save_kapp=self.save_kapp,
+            enzyme_classes=self.enzyme_classes,
         )
 
 class EtaInVitroConfig(BaseModel):

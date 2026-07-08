@@ -31,9 +31,9 @@ from src.kapp_builder import (
     create_enzyme_info_dataframe,
     create_FVA_dataframe,
     FVA_integration,
-    calculate_kapp_homomeric,
-    evaluate_kapp_homomeric,
-    get_kmax_homomeric,
+    calculate_kapp,
+    evaluate_kapp,
+    get_kmax,
     get_eta,
     get_kapp_dataframe,
 )
@@ -244,15 +244,19 @@ def run_kapp_pipeline(
             enzymes_info_dfs, str(config.paxdb_path), p_total=config.p_total
         )
     
-    # ==== STEP 8: Calculate kapp for homomeric enzymes ====
+    # ==== STEP 8: Calculate kapp for the requested enzyme classes ====
     logger.info("=" * 50)
-    logger.info("STEP 8: Calculate kapp for homomeric enzymes")
-    kapp_dfs = calculate_kapp_homomeric(enzyme_protein_info_dfs)
+    logger.info(f"STEP 8: Calculate kapp for enzyme classes: {config.enzyme_classes}")
+    kapp_dfs = calculate_kapp(enzyme_protein_info_dfs, enzyme_classes=config.enzyme_classes)
     
     # ==== STEP 9: Filter values above physical threshold ====
     logger.info("=" * 50)
     logger.info("STEP 9: Filter values above physical threshold")
-    kapp_dfs_filtered = evaluate_kapp_homomeric(kapp_dfs)
+    kapp_dfs_filtered = evaluate_kapp(
+        kapp_dfs,
+        upper_threshold=config.upper_threshold,
+        lower_threshold=config.lower_threshold,
+    )
 
     if config.save_kapp:
         logger.info("Collating wide-format kapp DataFrame")
@@ -260,10 +264,10 @@ def run_kapp_pipeline(
         kapp_df.to_csv(output_dir / "kapp.csv", index=False)
         logger.success(f"kapp DataFrame saved to: {output_dir / 'kapp.csv'}")
     
-    # ==== STEP 10: Get kmax for homomeric enzymes ====
+    # ==== STEP 10: Get kmax across conditions ====
     logger.info("=" * 50)
-    logger.info("STEP 10: Get kmax for homomeric enzymes")
-    kmax_df = get_kmax_homomeric(kapp_dfs_filtered)
+    logger.info("STEP 10: Get kmax (max kapp per enzyme across conditions)")
+    kmax_df = get_kmax(kapp_dfs_filtered)
     
     # ==== STEP 11: Calculate eta values ====
     if config.calculate_eta:
@@ -370,6 +374,7 @@ Output:
     else:
         pass
     logger.info(f"Save kapp dataframe: {config.save_kapp}")
+    logger.info(f"Enzyme classes: {config.enzyme_classes}")
     logger.info(f"Specific proteome: {config.specific_proteome}")
     if config.specific_proteome==True:
         logger.info(f"Specific proteome data: {config.proteomics_path.name}")

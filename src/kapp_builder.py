@@ -12,6 +12,7 @@ from loguru import logger
 from tqdm import tqdm
 
 from src.FVA_analysis.utils import cobra_to_fva_problem
+from src.proteomics_mapper import calculate_molecular_weight
 from src.utils import load_dataframe_if_path
 
 # =============================================================================
@@ -530,6 +531,11 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
         # Sequence info
         # Merge sequence info
         condition_df = pd.merge(condition_df, sequence_df, left_on="gene", right_on="model_gene_id", how="left")
+
+        # Molecular weight (g/mol) from sequence
+        #  required for the mass-fraction calculation of isoenzymes and complexes
+        if 'sequence' in condition_df.columns:
+            condition_df['molecular_weight'] = condition_df['sequence'].apply(calculate_molecular_weight)
         
         # Data cleaning and filtering
         # Drop rows with wrong direction-flux
@@ -553,16 +559,34 @@ def create_enzyme_info_dataframe(enzymes_df, fluxomics_df, substrates_df, sequen
     return enzyme_info_dfs
 
 
+# Constants
+_SECONDS_PER_HOUR = 3600.0
+_FLUX_H_TO_UMOL_MIN = 1000.0 / 60.0  # SA unit conversion factor: mmol/gDCW/h -> umol/gDCW/min
+
+# Reaction classes handled by the grouped (mass-fraction) calculator
+GROUPED_CLASSES = ('isoenzyme', 'complex', 'mixed')
+
+
 def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
     """
     Calculate kapp for homomeric enzymes for each condition.
-    
+
+    For a homomeric enzyme the apparent turnover number is the classic ratio of
+    flux to molar enzyme abundance:
+
+        kcat_app [s^-1] = (v / 3600) / E
+
+    where ``v`` is flux [mmol/gDCW/h] and ``E`` is ``protein_mmol_gdcw``
+    [mmol/gDCW]. The mass fraction (``MW * E``) and specific activity are also
+    computed so that the homomeric output shares one schema with the grouped
+    (isoenzyme/complex) output.
+
     Parameters:
         enzyme_protein_info_dfs: dict
             Dictionary with structure {condition: dataframe}
     
     Returns:
-        dict: Same structure as input but with added 'kcat_app' column in each dataframe
+        dict: Same structure as input but with added kapp columns in each dataframe
     """
     
     # Initialize output dictionary
@@ -589,7 +613,7 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
         df_copy['flux_value'] = df_copy['flux_value'].abs()
         
         # COBRA fluxes are in mmol/gDW*h, convert to mmol/gDW*s
-        df_copy['flux_value_per_sec'] = df_copy['flux_value'] / 3600  # mmol/gDW*s
+        df_copy['flux_value_per_sec'] = df_copy['flux_value'] / _SECONDS_PER_HOUR  # mmol/gDW*s
         
         # Calculate kcat_app: flux (mmol/gDW*s) / enzyme concentration (mmol/gDCW) = kcat (1/s)
         # Handle division by zero by replacing with NaN
@@ -597,6 +621,21 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
         
         # Replace infinite values with NaN
         df_copy['kcat_app'] = df_copy['kcat_app'].replace([float('inf'), float('-inf')], float('nan'))
+
+        # Mass fraction [mg/gDCW] = MW [g/mol = mg/mmol] * abundance [mmol/gDCW]
+        df_copy['mass_fraction'] = df_copy['molecular_weight'] * df_copy['protein_mmol_gdcw']
+        df_copy['MW_total'] = df_copy['molecular_weight']
+        # Specific activity [umol/mg/min] = flux [umol/gDCW/min] / mass_fraction [mg/gDCW]
+        df_copy['SA_app'] = (df_copy['flux_value'] * _FLUX_H_TO_UMOL_MIN) / df_copy['mass_fraction']
+        df_copy['SA_app'] = df_copy['SA_app'].replace([float('inf'), float('-inf')], float('nan'))
+
+        # Unified identity / metadata columns (single-gene enzyme)
+        df_copy['enzyme_key'] = df_copy['sequence']
+        df_copy['genes'] = df_copy['gene']
+        df_copy['sequences'] = df_copy['sequence']
+        df_copy['n_contributing'] = 1
+        if 'enzyme_class' not in df_copy.columns:
+            df_copy['enzyme_class'] = 'homomeric'
         
         # Count valid kcat_app values
         valid_kcat = df_copy['kcat_app'].notna().sum()
@@ -607,6 +646,245 @@ def calculate_kapp_homomeric(enzyme_protein_info_dfs: dict):
     
     logger.info("Completed kcat_app calculation for all conditions")
     return kapp_results
+
+
+def _select_contributing_genes(enzyme_class, dnf, genes_with_data):
+    """
+    Decide which genes contribute to the integrated-enzyme mass fraction,
+    applying the missing-data policy.
+
+    Parameters
+    ----------
+    enzyme_class : str
+        'isoenzyme', 'complex', or 'mixed'.
+    dnf : list[frozenset[str]]
+        DNF of the reaction GPR (OR of AND-groups).
+    genes_with_data : set[str]
+        Genes that have both a molecular weight and a measured abundance.
+
+    Returns
+    -------
+    set[str]
+        Genes to include in the sums. Empty -> the enzyme should be dropped.
+
+    Policy
+    ------
+    - complex (single AND-group): require every subunit to have data; otherwise
+      drop (a complex needs all subunits).
+    - isoenzyme (OR of single genes): include every alternative that has data
+      (an unmeasured/unexpressed isozyme contributes nothing).
+    - mixed (OR of AND-groups): keep only OR-branches whose subunits all have
+      data, and include the union of their genes.
+    """
+    if not dnf:
+        return set()
+
+    if enzyme_class == 'isoenzyme':
+        return {g for branch in dnf for g in branch if g in genes_with_data}
+
+    if enzyme_class == 'complex':
+        branch = set().union(*dnf)
+        return set(branch) if branch.issubset(genes_with_data) else set()
+
+    if enzyme_class == 'mixed':
+        kept = set()
+        for branch in dnf:
+            if branch.issubset(genes_with_data):
+                kept |= set(branch)
+        return kept
+
+    # Fallback: anything with data
+    return set(genes_with_data)
+
+
+def calculate_kapp_grouped(enzyme_protein_info_dfs: dict, enzyme_classes=GROUPED_CLASSES):
+    """
+    Calculate kapp for isoenzymes and complexes using the Davidi et al. (2016)
+    specific-activity method.
+
+    For each reaction the full GPR is treated as one integrated enzyme. The
+    enzyme mass fraction sums the contribution of every polypeptide chain:
+
+        mass_fraction [mg/gDCW] = sum_g ( MW_g [mg/mmol] * abundance_g [mmol/gDCW] )
+
+    The apparent specific activity and the (active-sites = 1, stoichiometry = 1)
+    turnover number are then:
+
+        SA_app   [umol/mg/min] = (v * 1000 / 60) / mass_fraction
+        kcat_app [s^-1]        = (v / 3600) * MW_total / mass_fraction
+                                = SA_app * MW_total / 60
+
+    where ``v`` is flux [mmol/gDCW/h] and ``MW_total = sum_g MW_g`` is the total
+    holoenzyme weight. This reduces exactly to the homomeric formula when a
+    single gene is involved.
+
+    Parameters
+    ----------
+    enzyme_protein_info_dfs : dict
+        Dictionary {condition: dataframe}; each frame must carry
+        'enzyme_id', 'enzyme_class', 'GPR', 'gene', 'molecular_weight',
+        'protein_mmol_gdcw', 'flux_value', 'SMILES', 'Direction'.
+    enzyme_classes : iterable[str]
+        Subset of {'isoenzyme', 'complex', 'mixed'} to compute.
+
+    Returns
+    -------
+    dict
+        {condition: dataframe} with one row per integrated enzyme-substrate
+        entry and the columns added by this function.
+    """
+    from src.enzyme_classifier import gpr_to_dnf
+
+    target_classes = [c for c in enzyme_classes if c in GROUPED_CLASSES]
+    kapp_results = {}
+
+    if not target_classes:
+        logger.info("No grouped enzyme classes requested; skipping grouped kapp.")
+        return {name: None for name in enzyme_protein_info_dfs}
+
+    group_keys = ['enzyme_id', 'SMILES', 'Direction']
+
+    for condition_name, enzyme_df in enzyme_protein_info_dfs.items():
+        if enzyme_df is None:
+            kapp_results[condition_name] = None
+            continue
+
+        df = enzyme_df.copy()
+        df = df[df['enzyme_class'].isin(target_classes)]
+        if len(df) == 0:
+            kapp_results[condition_name] = df
+            logger.debug(f"  {condition_name}: no grouped enzymes")
+            continue
+
+        df['flux_value'] = df['flux_value'].abs()
+
+        # Cache the DNF for each distinct GPR rule encountered in this condition
+        dnf_cache = {}
+
+        records = []
+        for _, group in df.groupby(group_keys, dropna=False):
+            first = group.iloc[0]
+            gpr_rule = first['GPR']
+            enzyme_class = first['enzyme_class']
+
+            if gpr_rule not in dnf_cache:
+                dnf_cache[gpr_rule] = gpr_to_dnf(gpr_rule)
+            dnf = dnf_cache[gpr_rule]
+
+            # One (MW, abundance) per distinct gene in this group
+            gene_rows = group.drop_duplicates(subset=['gene'])
+            gene_data = {}
+            for _, row in gene_rows.iterrows():
+                mw = row['molecular_weight']
+                ab = row['protein_mmol_gdcw']
+                if pd.notna(mw) and pd.notna(ab):
+                    gene_data[row['gene']] = (float(mw), float(ab))
+
+            contributing = _select_contributing_genes(enzyme_class, dnf, set(gene_data))
+            if not contributing:
+                continue
+
+            mass_fraction = sum(gene_data[g][0] * gene_data[g][1] for g in contributing)
+            mw_total = sum(gene_data[g][0] for g in contributing)
+            if not (mass_fraction > 0):
+                continue
+
+            flux_value = float(first['flux_value'])
+            flux_per_sec = flux_value / _SECONDS_PER_HOUR
+            sa_app = (flux_value * _FLUX_H_TO_UMOL_MIN) / mass_fraction
+            kcat_app = flux_per_sec * mw_total / mass_fraction
+
+            sorted_genes = sorted(contributing)
+            seq_map = (
+                gene_rows.set_index('gene')['sequence'].to_dict()
+                if 'sequence' in gene_rows.columns else {}
+            )
+            sequences = ';'.join(str(seq_map.get(g, '')) for g in sorted_genes)
+
+            records.append({
+                'enzyme_key': first['enzyme_id'],
+                'enzyme_id': first['enzyme_id'],
+                'enzyme_class': enzyme_class,
+                'gpr_class': first.get('gpr_class'),
+                'genes': ','.join(sorted_genes),
+                'sequences': sequences,
+                'sequence': sequences,
+                'gene': ','.join(sorted_genes),
+                'rxn': first['rxn'],
+                'subsystem': first.get('subsystem'),
+                'SMILES': first['SMILES'],
+                'Direction': first['Direction'],
+                'flux_value': flux_value,
+                'flux_value_per_sec': flux_per_sec,
+                'FVA_lower': first.get('FVA_lower'),
+                'FVA_upper': first.get('FVA_upper'),
+                'mass_fraction': mass_fraction,
+                'MW_total': mw_total,
+                'protein_mmol_gdcw': mass_fraction / mw_total if mw_total else float('nan'),
+                'n_components': int(first.get('n_components', len(gene_data))),
+                'n_contributing': len(contributing),
+                'SA_app': sa_app,
+                'kcat_app': kcat_app,
+            })
+
+        grouped_df = pd.DataFrame(records)
+        kapp_results[condition_name] = grouped_df
+        logger.debug(
+            f"  {condition_name}: {len(grouped_df)} integrated enzymes "
+            f"(classes: {target_classes})"
+        )
+
+    logger.info("Completed grouped (isoenzyme/complex) kcat_app calculation for all conditions")
+    return kapp_results
+
+
+def calculate_kapp(enzyme_protein_info_dfs: dict, enzyme_classes=('homomeric',)):
+    """
+    Calculate kapp for the requested enzyme classes and combine
+    the per-condition results into a single dict of dataframes.
+
+    Parameters
+    ----------
+    enzyme_protein_info_dfs : dict
+        {condition: dataframe} after proteomics mapping.
+    enzyme_classes : iterable[str]
+        Any of {'homomeric', 'isoenzyme', 'complex', 'mixed'}.
+
+    Returns
+    -------
+    dict
+        {condition: dataframe} with kapp columns, concatenating the homomeric
+        and grouped results that were requested.
+    """
+    classes = list(enzyme_classes)
+    logger.info(f"Calculating kapp for enzyme classes: {classes}")
+
+    homomeric_results = (
+        calculate_kapp_homomeric(enzyme_protein_info_dfs)
+        if 'homomeric' in classes else {}
+    )
+
+    grouped_classes = [c for c in classes if c in GROUPED_CLASSES]
+    grouped_results = (
+        calculate_kapp_grouped(enzyme_protein_info_dfs, enzyme_classes=grouped_classes)
+        if grouped_classes else {}
+    )
+
+    combined = {}
+    for condition_name in enzyme_protein_info_dfs:
+        frames = []
+        homo = homomeric_results.get(condition_name)
+        grp = grouped_results.get(condition_name)
+        if homo is not None and len(homo) > 0:
+            frames.append(homo)
+        if grp is not None and len(grp) > 0:
+            frames.append(grp)
+        if frames:
+            combined[condition_name] = pd.concat(frames, ignore_index=True)
+        else:
+            combined[condition_name] = None
+
+    return combined
 
 
 def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lower_threshold: float = 1e-5):
@@ -682,6 +960,10 @@ def evaluate_kapp_homomeric(kapp_results: dict, upper_threshold: float = 1e6, lo
     return kapp_filtered_results
 
 
+# The kcat_app threshold filter is class-agnostic.
+evaluate_kapp = evaluate_kapp_homomeric
+
+
 def get_kapp_dataframe(kapp_filtered_results: dict) -> pd.DataFrame:
     """
     Collate kapp results from all conditions into a single wide-format DataFrame.
@@ -701,7 +983,7 @@ def get_kapp_dataframe(kapp_filtered_results: dict) -> pd.DataFrame:
         Wide-format DataFrame with one row per enzyme-substrate-reaction entry and
         one column per growth condition.
     """
-    index_cols = ['sequence', 'SMILES', 'gene', 'rxn', 'subsystem']
+    index_cols = ['enzyme_key', 'enzyme_class', 'sequence', 'SMILES', 'gene', 'rxn', 'subsystem']
     long_frames = []
 
     for condition_name, df in kapp_filtered_results.items():
@@ -751,14 +1033,20 @@ def get_kapp_dataframe(kapp_filtered_results: dict) -> pd.DataFrame:
 def get_kmax_homomeric(kapp_results: dict):
     """
     Get the maximum kapp of each enzyme-substrate pair across all conditions.
-    
+
+    The enzyme is identified by ``enzyme_key`` (the protein sequence for
+    homomeric enzymes, the integrated-enzyme id for isoenzymes/complexes), so
+    this handles all enzyme classes uniformly. ``kcat_app_max`` is the maximum
+    turnover (s^-1) and ``SA_app_max`` is the maximum specific activity
+    (umol/mg/min) across conditions.
+
     Parameters:
         kapp_results: dict
             Dictionary with structure {condition: dataframe}
     Returns:
         kmax_results: pd.DataFrame
-            DataFrame with columns: ['sequence', 'SMILES', 'Direction', 'kcat_app_max', 'condition_max', ...]
-            containing the maximum kcat_app value for each enzyme-substrate pair
+            DataFrame with the maximum kcat_app value for each enzyme-substrate
+            pair plus metadata and SA_app_max.
     """
     logger.info("Starting kmax analysis across all conditions...")
     
@@ -782,22 +1070,35 @@ def get_kmax_homomeric(kapp_results: dict):
     
     if not all_dataframes:
         logger.warning("No valid data found across all conditions")
-        return pd.DataFrame(columns=['sequence', 'SMILES', 'kcat_app_max', 'condition_max'])
+        return pd.DataFrame(columns=['enzyme_key', 'sequence', 'SMILES', 'kcat_app_max', 'condition_max'])
     
     # Concatenate all dataframes
     combined_df = pd.concat(all_dataframes, ignore_index=True)
     logger.debug(f"Combined dataframe has {len(combined_df)} total entries")
-    
-    # Group by enzyme-substrate pair (sequence + SMILES) and find maximum kcat_app
+
+    group_cols = ['enzyme_key', 'SMILES']
+
+    # Representative row = the condition with the maximum turnover number
     kmax_results = (
-        combined_df.loc[combined_df.groupby(['sequence', 'SMILES'])['kcat_app'].idxmax()]
+        combined_df.loc[combined_df.groupby(group_cols)['kcat_app'].idxmax()]
         .reset_index(drop=True)
     )
-    
+
+    # Maximum specific activity across conditions (may differ from the kcat-max
+    # condition when the contributing subunit set varies between conditions)
+    sa_max = (
+        combined_df.groupby(group_cols)['SA_app'].max().reset_index()
+        .rename(columns={'SA_app': 'SA_app_max'})
+        if 'SA_app' in combined_df.columns else None
+    )
+
     # Select and rename relevant columns for output
     output_columns = [
-        'sequence', 'SMILES', 'Direction', 'kcat_app', 'source_condition',
-        'gene', 'rxn', 'flux_value', 'FVA_upper', 'FVA_lower', 'protein_mmol_gdcw', 'subsystem' 
+        'enzyme_key', 'enzyme_class', 'sequence', 'sequences', 'genes',
+        'SMILES', 'Direction', 'kcat_app', 'SA_app', 'source_condition',
+        'gene', 'rxn', 'flux_value', 'FVA_upper', 'FVA_lower',
+        'protein_mmol_gdcw', 'mass_fraction', 'MW_total',
+        'n_components', 'n_contributing', 'subsystem',
     ]
     
     # Keep only columns that exist in the dataframe
@@ -810,6 +1111,10 @@ def get_kmax_homomeric(kapp_results: dict):
         'source_condition': 'condition_max'
     }
     kmax_results = kmax_results.rename(columns=column_renames)
+
+    # Attach the across-condition SA maximum
+    if sa_max is not None:
+        kmax_results = kmax_results.merge(sa_max, on=group_cols, how='left')
     
     # Sort by kcat_app_max in descending order
     kmax_results = kmax_results.sort_values('kcat_app_max', ascending=False).reset_index(drop=True)
@@ -820,6 +1125,10 @@ def get_kmax_homomeric(kapp_results: dict):
     )
     
     return kmax_results
+
+
+# Class-agnostic alias
+get_kmax = get_kmax_homomeric
 
 
 def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
@@ -857,8 +1166,8 @@ def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
         # Merge with kmax_results to get the maximum kcat_app value
         df_with_eta = pd.merge(
             df_with_eta,
-            kmax_results[['sequence', 'SMILES', 'kcat_app_max']],
-            on=['sequence', 'SMILES'],
+            kmax_results[['enzyme_key', 'SMILES', 'kcat_app_max']],
+            on=['enzyme_key', 'SMILES'],
             how='left'
         )
         
@@ -872,7 +1181,7 @@ def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
         kapp_results_with_eta[condition_name] = df_with_eta
         
         # Collect eta values for variance calculation
-        eta_data = df_with_eta[['sequence', 'SMILES', 'eta']].copy()
+        eta_data = df_with_eta[['enzyme_key', 'SMILES', 'eta']].copy()
         eta_data['source_condition'] = condition_name
         eta_data = eta_data[eta_data['eta'].notna()]  # Keep only valid eta values
         
@@ -895,7 +1204,7 @@ def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
     all_eta_df = pd.concat(all_eta_values, ignore_index=True)
     
     # Group by enzyme-substrate pair and calculate variance metrics
-    variance_metrics = all_eta_df.groupby(['sequence', 'SMILES'])['eta'].agg([
+    variance_metrics = all_eta_df.groupby(['enzyme_key', 'SMILES'])['eta'].agg([
         ('eta_mean', 'mean'),
         ('eta_stdev', 'std'),
         ('eta_min', 'min'),
@@ -912,8 +1221,8 @@ def get_eta(kapp_results: dict, kmax_results: pd.DataFrame):
     # Merge variance metrics with kmax_results
     kmax_with_variance = pd.merge(
         kmax_results,
-        variance_metrics[['sequence', 'SMILES', 'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv']],
-        on=['sequence', 'SMILES'],
+        variance_metrics[['enzyme_key', 'SMILES', 'eta_mean', 'eta_stdev', 'eta_min', 'eta_max', 'eta_cv']],
+        on=['enzyme_key', 'SMILES'],
         how='left'
     )
     

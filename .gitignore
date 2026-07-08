@@ -18,3 +18,4 @@ logs/
 scripts/slurm/
 cache/
 local/
+examples/
